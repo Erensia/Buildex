@@ -8,7 +8,8 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
 
   const db = getDb();
-  const [characters, weapons, echoes, echoSets, mainStats, echoSetMemberships] = await Promise.all([
+  const [games, characters, weapons, echoes, echoSets, mainStats, echoSetMemberships] = await Promise.all([
+    db.query.games.findMany({ columns: { name: true, currentDataVersion: true, sourceSnapshot: true, sourceUrl: true } }),
     db.query.characters.findMany(),
     db.query.weapons.findMany(),
     db.query.echoes.findMany(),
@@ -17,5 +18,5 @@ export async function GET() {
     db.select().from(echoSetEchoes),
   ]);
 
-  return NextResponse.json({ characters, weapons, echoes, echoSets, mainStats, echoSetMemberships });
+  return NextResponse.json({ games, characters, weapons, echoes, echoSets, mainStats, echoSetMemberships });
 }
