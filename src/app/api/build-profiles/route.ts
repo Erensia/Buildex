@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       },
     })), ...setEffects.automaticSources],
     activeBuffIds: parsed.data.activeBuffIds,
-  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS : []), ...setEffects.conditionalBuffs]);
+  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon.externalKey === "blazing-brilliance") : []), ...setEffects.conditionalBuffs]);
   const calculatedResult = {
     ...result,
     grade: character.externalKey === "changli"

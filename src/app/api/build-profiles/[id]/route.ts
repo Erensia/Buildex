@@ -49,7 +49,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       stats: { [echo.mainStat]: mainStatValues[echo.cost][echo.mainStat] ?? 0, ...Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) },
     })), ...setEffects.automaticSources],
     activeBuffIds: parsed.data.activeBuffIds,
-  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS : []), ...setEffects.conditionalBuffs]);
+  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon.externalKey === "blazing-brilliance") : []), ...setEffects.conditionalBuffs]);
   const calculatedResult = {
     ...result,
     grade: character.externalKey === "changli"
