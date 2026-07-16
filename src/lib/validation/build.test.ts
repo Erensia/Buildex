@@ -42,4 +42,12 @@ describe("buildInputSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("rejects duplicate or unsupported substats on one echo", () => {
+    const result = buildInputSchema.safeParse({
+      name: "Test", characterKey: "changli", weaponKey: "weapon", formulaVersion: "ww-2.0.0",
+      echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "critRate", value: 8 }, { key: "critRate", value: 7 }] : [] })),
+    });
+    expect(result.success).toBe(false);
+  });
 });

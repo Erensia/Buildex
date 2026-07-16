@@ -1,12 +1,20 @@
 import { z } from "zod";
 
+const subStatKeys = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus"] as const;
+
 export const echoSchema = z.object({
   slot: z.number().int().min(1).max(5),
   echoKey: z.string().min(1).max(80),
   setKey: z.string().min(1).max(80),
   cost: z.union([z.literal(1), z.literal(3), z.literal(4)]),
   mainStat: z.string().min(1).max(80),
-  subStats: z.array(z.object({ key: z.string().min(1).max(80), value: z.number().finite().nonnegative() })).max(5),
+  subStats: z.array(z.object({ key: z.enum(subStatKeys), value: z.number().finite().nonnegative().max(100) })).max(5).superRefine((subStats, context) => {
+    const seenKeys = new Set<string>();
+    for (const [index, subStat] of subStats.entries()) {
+      if (seenKeys.has(subStat.key)) context.addIssue({ code: "custom", path: [index, "key"], message: "Each substat can only appear once per echo." });
+      seenKeys.add(subStat.key);
+    }
+  }),
 });
 
 export const buildInputSchema = z.object({
