@@ -13,6 +13,7 @@ export const buildInputSchema = z.object({
   characterKey: z.string().min(1).max(80),
   weaponKey: z.string().min(1).max(80),
   echoes: z.array(echoSchema).length(5),
+  activeBuffIds: z.array(z.string().min(1).max(80)).max(10).default([]),
   formulaVersion: z.string().min(1).max(32),
 });
 

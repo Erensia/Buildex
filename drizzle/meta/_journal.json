@@ -8,6 +8,13 @@
       "when": 1784176550429,
       "tag": "0000_fancy_edwin_jarvis",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784181000000,
+      "tag": "0001_verified_wuthering_waves_seed",
+      "breakpoints": true
     }
   ]
 }
