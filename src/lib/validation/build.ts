@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const echoSchema = z.object({
   slot: z.number().int().min(1).max(5),
+  echoKey: z.string().min(1).max(80).optional(),
   setKey: z.string().min(1).max(80),
   cost: z.union([z.literal(1), z.literal(3), z.literal(4)]),
   mainStat: z.string().min(1).max(80),

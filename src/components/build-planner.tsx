@@ -1,228 +1,104 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
-import type { StatKey, StatValues } from "@/lib/formula/stats";
 import { FORMULA_VERSION } from "@/lib/formula/versions";
-import { signOut } from "next-auth/react";
+import type { StatKey, StatValues } from "@/lib/formula/stats";
 
-type MainStat = { key: StatKey; label: string; value: number };
+type Character = { externalKey: string; name: string; baseStats: StatValues & { weaponType?: string } };
+type Weapon = { externalKey: string; name: string; weaponType: string; stats: StatValues };
+type Echo = { externalKey: string; name: string; cost: 1 | 3 | 4 };
+type EchoSet = { externalKey: string; name: string };
+type MainStat = { cost: 1 | 3 | 4; statKey: StatKey; value: number };
+type BuildData = { characters: Character[]; weapons: Weapon[]; echoes: Echo[]; echoSets: EchoSet[]; mainStats: MainStat[] };
+type BuildInput = { name: string; characterKey: string; weaponKey: string; echoes: { slot: number; echoKey?: string; setKey: string; cost: 1 | 3 | 4; mainStat: string; subStats: { key: string; value: number }[] }[]; activeBuffIds: string[]; formulaVersion: string };
+type SavedProfile = { id: string; name: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number } };
 
-const mainStatOptions: Record<4 | 3 | 1, MainStat[]> = {
-  4: [
-    { key: "critRate", label: "치명타 확률 22%", value: 22 },
-    { key: "critDamage", label: "치명타 피해 44%", value: 44 },
-    { key: "attackPercent", label: "공격력 33%", value: 33 },
-  ],
-  3: [
-    { key: "fusionDamageBonus", label: "용융 피해 보너스 30%", value: 30 },
-    { key: "attackPercent", label: "공격력 30%", value: 30 },
-    { key: "energyRegen", label: "공명 효율 32%", value: 32 },
-  ],
-  1: [{ key: "attackPercent", label: "공격력 18%", value: 18 }],
-};
+const slots: { slot: number; cost: 1 | 3 | 4 }[] = [{ slot: 1, cost: 4 }, { slot: 2, cost: 3 }, { slot: 3, cost: 3 }, { slot: 4, cost: 1 }, { slot: 5, cost: 1 }];
+const statLabels: Record<StatKey, string> = { baseAttack: "Base ATK", flatAttack: "Flat ATK", attackPercent: "ATK %", critRate: "CRIT Rate", critDamage: "CRIT DMG", energyRegen: "Energy Regen", fusionDamageBonus: "Fusion DMG", resonanceSkillDamageBonus: "Resonance Skill DMG" };
+const trackedStats: StatKey[] = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus"];
 
-const echoSlots = [
-  { id: "echo-1", label: "4코 악몽 · 지옥불 기사", cost: 4 as const },
-  { id: "echo-2", label: "3코 에코 1", cost: 3 as const },
-  { id: "echo-3", label: "3코 에코 2", cost: 3 as const },
-  { id: "echo-4", label: "1코 에코 1", cost: 1 as const },
-  { id: "echo-5", label: "1코 에코 2", cost: 1 as const },
-];
-
-const initialMainStats = ["critRate", "fusionDamageBonus", "attackPercent", "attackPercent", "attackPercent"];
-const trackedStats: { key: StatKey; label: string; step: number }[] = [
-  { key: "flatAttack", label: "고정 공격력", step: 1 },
-  { key: "critRate", label: "치명타 확률", step: 0.1 },
-  { key: "critDamage", label: "치명타 피해", step: 0.1 },
-  { key: "energyRegen", label: "공명 효율", step: 0.1 },
-  { key: "fusionDamageBonus", label: "용융 피해 보너스", step: 0.1 },
-];
-
-type SavedProfile = {
-  id: string;
-  name: string;
-  calculatedResult: { attack: number; critRate: number; critDamage: number };
-};
-
-function display(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
+function format(value: number) { return Number.isInteger(value) ? String(value) : value.toFixed(1); }
 
 export function BuildPlanner({ userName }: { userName: string }) {
-  const [selectedMainStats, setSelectedMainStats] = useState(initialMainStats);
+  const [data, setData] = useState<BuildData>();
+  const [profiles, setProfiles] = useState<SavedProfile[]>([]);
+  const [profileId, setProfileId] = useState<string>();
+  const [name, setName] = useState("New build");
+  const [characterKey, setCharacterKey] = useState("");
+  const [weaponKey, setWeaponKey] = useState("");
+  const [setKey, setSetKey] = useState("");
+  const [echoKeys, setEchoKeys] = useState<string[]>([]);
+  const [mainStats, setMainStats] = useState<string[]>([]);
   const [subStats, setSubStats] = useState<StatValues>({});
   const [activeBuffIds, setActiveBuffIds] = useState<string[]>([]);
-  const [profileName, setProfileName] = useState("장리 S0 전무 43311");
-  const [saveMessage, setSaveMessage] = useState<string>();
+  const [message, setMessage] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const [profiles, setProfiles] = useState<SavedProfile[]>([]);
 
   useEffect(() => {
-    void fetch("/api/build-profiles")
-      .then((response) => response.ok ? response.json() : [])
-      .then((items: SavedProfile[]) => setProfiles(items));
+    void Promise.all([fetch("/api/build-data").then((r) => r.json()), fetch("/api/build-profiles").then((r) => r.json())]).then(([loadedData, loadedProfiles]) => {
+      const buildData = loadedData as BuildData;
+      setData(buildData);
+      setProfiles(loadedProfiles as SavedProfile[]);
+      const character = buildData.characters[0];
+      const set = buildData.echoSets[0];
+      if (character) setCharacterKey(character.externalKey);
+      if (set) setSetKey(set.externalKey);
+      setMainStats(slots.map((slot) => buildData.mainStats.find((item) => item.cost === slot.cost)?.statKey ?? ""));
+      setEchoKeys(slots.map((slot) => buildData.echoes.find((item) => item.cost === slot.cost)?.externalKey ?? ""));
+    });
   }, []);
 
+  const character = data?.characters.find((item) => item.externalKey === characterKey);
+  const compatibleWeapons = useMemo(() => data?.weapons.filter((weapon) => !character?.baseStats.weaponType || weapon.weaponType === character.baseStats.weaponType) ?? [], [data, character]);
+  const weapon = compatibleWeapons.find((item) => item.externalKey === weaponKey) ?? compatibleWeapons[0];
+  const buffs = useMemo(() => characterKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS : [], [characterKey]);
+  const optionsFor = useCallback((cost: 1 | 3 | 4) => data?.mainStats.filter((item) => item.cost === cost) ?? [], [data]);
+
   const calculation = useMemo(() => {
-    const echoes = echoSlots.map((slot, index) => {
-      const selected = mainStatOptions[slot.cost].find((option) => option.key === selectedMainStats[index]) ?? mainStatOptions[slot.cost][0];
-      return { id: slot.id, label: slot.label, stats: { [selected.key]: selected.value } };
+    if (!character || !weapon) return null;
+    const echoes = slots.map((slot, index) => {
+      const option = optionsFor(slot.cost).find((item) => item.statKey === mainStats[index]);
+      return { id: `echo-${slot.slot}`, label: `Echo ${slot.slot}`, stats: { ...(option ? { [option.statKey]: option.value } : {}), ...(index === 0 ? subStats : {}) } };
     });
-    const result = calculateBuildStats({
-      character: { id: "changli", label: "장리", stats: { baseAttack: 462, critRate: 5 } },
-      weapon: { id: "blazing-brilliance", label: "솟아오르는 화염", stats: { baseAttack: 588, critDamage: 48.6 } },
-      echoes: [...echoes, { id: "sub-stats", label: "부옵 합계", stats: subStats }],
-      activeBuffIds,
-    }, CHANGLI_LUPA_BRANT_BUFFS);
-    return { result, grade: evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS) };
-  }, [activeBuffIds, selectedMainStats, subStats]);
+    const result = calculateBuildStats({ character: { id: character.externalKey, label: character.name, stats: character.baseStats }, weapon: { id: weapon.externalKey, label: weapon.name, stats: weapon.stats }, echoes, activeBuffIds }, buffs);
+    return { result, grade: characterKey === "changli" ? evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS) : null };
+  }, [activeBuffIds, buffs, character, characterKey, mainStats, optionsFor, subStats, weapon]);
 
-  function updateMainStat(index: number, key: string) {
-    setSelectedMainStats((current) => current.map((value, itemIndex) => itemIndex === index ? key : value));
+  function payload(): BuildInput {
+    return { name, characterKey, weaponKey: weaponKey || weapon?.externalKey || "", echoes: slots.map((slot, index) => ({ slot: slot.slot, echoKey: echoKeys[index], setKey, cost: slot.cost, mainStat: mainStats[index], subStats: index === 0 ? Object.entries(subStats).map(([key, value]) => ({ key, value: value ?? 0 })) : [] })), activeBuffIds, formulaVersion: FORMULA_VERSION };
   }
-
-  function updateSubStat(key: StatKey, value: string) {
-    const numericValue = Number(value);
-    setSubStats((current) => ({ ...current, [key]: Number.isFinite(numericValue) ? Math.max(0, numericValue) : 0 }));
-  }
-
-  function toggleBuff(id: string) {
-    setActiveBuffIds((current) => current.includes(id) ? current.filter((buffId) => buffId !== id) : [...current, id]);
-  }
-
-  async function saveProfile() {
-    setSaving(true);
-    setSaveMessage(undefined);
-    const payload = {
-      name: profileName,
-      characterKey: "changli",
-      weaponKey: "blazing-brilliance",
-      echoes: echoSlots.map((slot, index) => ({
-        slot: index + 1,
-        setKey: "molten-rift",
-        cost: slot.cost,
-        mainStat: selectedMainStats[index],
-        subStats: index === 0 ? Object.entries(subStats).map(([key, value]) => ({ key, value })) : [],
-      })),
-      activeBuffIds,
-      formulaVersion: FORMULA_VERSION,
-    };
-    const response = await fetch("/api/build-profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  async function save() {
+    setSaving(true); setMessage(undefined);
+    const response = await fetch(profileId ? `/api/build-profiles/${profileId}` : "/api/build-profiles", { method: profileId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) });
     const body = await response.json().catch(() => null);
-    if (response.ok) {
-      setProfiles((current) => [body as SavedProfile, ...current]);
-      setSaveMessage("빌드를 저장했습니다.");
-    } else {
-      setSaveMessage(body?.error ?? "빌드를 저장하지 못했습니다.");
-    }
+    if (!response.ok) setMessage(body?.error ?? "Could not save the build.");
+    else { setProfiles((current) => profileId ? current.map((item) => item.id === body.id ? body : item) : [body, ...current]); setProfileId(body.id); setMessage("Build saved."); }
     setSaving(false);
   }
-
-  async function deleteProfile(id: string) {
-    const response = await fetch(`/api/build-profiles/${id}`, { method: "DELETE" });
-    if (response.ok) setProfiles((current) => current.filter((profile) => profile.id !== id));
-    else setSaveMessage("저장된 빌드를 삭제하지 못했습니다.");
+  function load(profile: SavedProfile) {
+    const input = profile.buildInput;
+    setProfileId(profile.id); setName(input.name); setCharacterKey(input.characterKey); setWeaponKey(input.weaponKey); setSetKey(input.echoes[0]?.setKey ?? ""); setEchoKeys(input.echoes.map((echo) => echo.echoKey ?? "")); setMainStats(input.echoes.map((echo) => echo.mainStat)); setSubStats(Object.fromEntries(input.echoes.flatMap((echo) => echo.subStats.map((stat) => [stat.key, stat.value] as const)))); setActiveBuffIds(input.activeBuffIds); setMessage(`Loaded ${profile.name}.`);
   }
+  function newBuild() { setProfileId(undefined); setName("New build"); setSubStats({}); setActiveBuffIds([]); setMessage("New build ready."); }
+  async function remove(id: string) { const response = await fetch(`/api/build-profiles/${id}`, { method: "DELETE" }); if (response.ok) { setProfiles((items) => items.filter((item) => item.id !== id)); if (profileId === id) newBuild(); } }
 
-  return (
-    <main className="min-h-screen bg-zinc-950 pb-16 text-zinc-100">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <Link className="text-xl font-black tracking-tight" href="/">BUILDEX</Link>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-xs text-zinc-400 sm:block">{userName}님</span>
-          <button className="text-xs font-semibold text-zinc-400 hover:text-white" onClick={() => signOut({ callbackUrl: "/" })}>로그아웃</button>
-          <span className="rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-300">명조 3.5 · 장리 S0 전무</span>
-        </div>
-      </header>
-      <div className="mx-auto grid max-w-6xl gap-6 px-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <section className="space-y-6">
-          <div>
-            <p className="text-sm font-semibold tracking-[0.18em] text-violet-400">BUILD INPUT</p>
-            <h1 className="mt-2 text-4xl font-black tracking-tight">장리 빌드 플래너</h1>
-            <p className="mt-3 text-sm leading-6 text-zinc-400">43311 프리셋의 주옵과 부옵 합계를 입력하세요. 파티 효과는 조건을 만족했을 때만 적용됩니다.</p>
-          </div>
-
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6">
-            <h2 className="font-bold">에코 주옵</h2>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {echoSlots.map((slot, index) => (
-                <label className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4" key={slot.id}>
-                  <span className="block text-sm font-semibold">{slot.label}</span>
-                  <span className="mt-1 block text-xs text-zinc-500">{slot.cost}코스트 · 5성 +25</span>
-                  <select className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-violet-400" value={selectedMainStats[index]} onChange={(event) => updateMainStat(index, event.target.value)}>
-                    {mainStatOptions[slot.cost].map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-                  </select>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6">
-            <h2 className="font-bold">빌드 프리셋 저장</h2>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <input className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-violet-400" value={profileName} maxLength={80} onChange={(event) => setProfileName(event.target.value)} />
-              <button className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !profileName.trim()} onClick={saveProfile}>{saving ? "저장 중" : "현재 빌드 저장"}</button>
-            </div>
-            {saveMessage && <p className="mt-3 text-sm text-zinc-300">{saveMessage}</p>}
-          </section>
-
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6">
-            <h2 className="font-bold">에코 부옵 합계</h2>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">5개 에코에서 얻은 수치만 합산해 입력합니다. 게임 기본 스탯과 주옵은 자동 반영됩니다.</p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {trackedStats.map((stat) => (
-                <label className="text-sm font-medium" key={stat.key}>{stat.label}
-                  <input className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 outline-none focus:border-violet-400" min="0" step={stat.step} type="number" value={subStats[stat.key] ?? ""} onChange={(event) => updateSubStat(stat.key, event.target.value)} />
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6">
-            <h2 className="font-bold">조건부 효과</h2>
-            <div className="mt-4 space-y-3">
-              {CHANGLI_LUPA_BRANT_BUFFS.map((buff) => (
-                <label className="flex cursor-pointer gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4" key={buff.id}>
-                  <input checked={activeBuffIds.includes(buff.id)} className="mt-1 size-4 accent-violet-500" onChange={() => toggleBuff(buff.id)} type="checkbox" />
-                  <span><strong className="block text-sm">{buff.label}</strong><span className="mt-1 block text-xs leading-5 text-zinc-500">{buff.condition}</span></span>
-                </label>
-              ))}
-            </div>
-          </section>
-        </section>
-
-        <aside className="h-fit rounded-3xl border border-violet-500/30 bg-gradient-to-b from-violet-500/15 to-zinc-900 p-6 lg:sticky lg:top-6">
-          <p className="text-sm font-semibold text-violet-300">CALCULATED RESULT</p>
-          <div className="mt-5 rounded-2xl bg-zinc-950/70 p-5">
-            <p className="text-sm text-zinc-400">현재 등급</p>
-            <p className="mt-1 text-3xl font-black">{calculation.grade.grade ? ({ standard: "준종결", good: "종결", excellent: "극종결" }[calculation.grade.grade]) : "미달"}</p>
-          </div>
-          <dl className="mt-5 grid grid-cols-2 gap-3">
-            {[
-              ["공격력", calculation.result.attack], ["치명타 확률", `${display(calculation.result.critRate)}%`],
-              ["치명타 피해", `${display(calculation.result.critDamage)}%`], ["공명 효율", `${display(calculation.result.energyRegen)}%`],
-              ["용융 피해", `${display(calculation.result.fusionDamageBonus)}%`], ["공명 스킬 피해", `${display(calculation.result.resonanceSkillDamageBonus)}%`],
-            ].map(([label, value]) => <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4" key={String(label)}><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-1 text-lg font-bold">{value}</dd></div>)}
-          </dl>
-          <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-5">
-            <h2 className="font-bold">저장한 빌드</h2>
-            {profiles.length === 0 ? <p className="mt-3 text-sm text-zinc-500">아직 저장한 빌드가 없습니다.</p> : <ul className="mt-3 space-y-3">
-              {profiles.map((profile) => <li className="flex items-center justify-between gap-3" key={profile.id}>
-                <div className="min-w-0"><p className="truncate text-sm font-semibold">{profile.name}</p><p className="text-xs text-zinc-500">공격력 {profile.calculatedResult.attack} · 치명 {display(profile.calculatedResult.critRate)} / {display(profile.calculatedResult.critDamage)}</p></div>
-                <button className="shrink-0 text-xs font-semibold text-rose-300 hover:text-rose-200" onClick={() => deleteProfile(profile.id)}>삭제</button>
-              </li>)}
-            </ul>}
-          </div>
-          <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-5">
-            <h2 className="font-bold">다음 목표</h2>
-            {calculation.grade.unmetRequirements.length > 0 ? <ul className="mt-3 space-y-2 text-sm text-zinc-300">{calculation.grade.unmetRequirements.map((requirement) => <li key={requirement.stat}>· {requirement.label} {requirement.minimum}% 이상</li>)}</ul> : <p className="mt-3 text-sm text-emerald-300">극종결 기준을 달성했습니다.</p>}
-          </div>
-          <p className="mt-5 text-xs leading-5 text-zinc-500">저장 기능은 로그인 및 사용자 소유권 검증 단계와 함께 추가됩니다. 현재 결과는 이 화면에서만 계산됩니다.</p>
-        </aside>
-      </div>
-    </main>
-  );
+  if (!data) return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-100">Loading build data…</main>;
+  return <main className="min-h-screen bg-zinc-950 pb-16 text-zinc-100">
+    <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6"><Link className="text-xl font-black" href="/">BUILDEX</Link><div className="flex gap-3 text-sm text-zinc-400"><span>{userName}</span><button onClick={() => signOut({ callbackUrl: "/" })}>Sign out</button></div></header>
+    <div className="mx-auto grid max-w-6xl gap-6 px-6 lg:grid-cols-[1.2fr_.8fr]"><section className="space-y-6">
+      <div><p className="text-sm font-semibold tracking-widest text-violet-400">BUILD PLANNER</p><h1 className="mt-2 text-4xl font-black">Configure your build</h1></div>
+      <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6"><h2 className="font-bold">Character and weapon</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><label>Character<select className="mt-2 w-full rounded-xl bg-zinc-950 p-3" value={characterKey} onChange={(e) => setCharacterKey(e.target.value)}>{data.characters.map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label><label>Weapon<select className="mt-2 w-full rounded-xl bg-zinc-950 p-3" value={weapon?.externalKey ?? ""} onChange={(e) => setWeaponKey(e.target.value)}>{compatibleWeapons.map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label></div></section>
+      <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6"><h2 className="font-bold">Echo setup</h2><label className="mt-4 block">Echo set<select className="mt-2 w-full rounded-xl bg-zinc-950 p-3" value={setKey} onChange={(e) => setSetKey(e.target.value)}>{data.echoSets.map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label><div className="mt-4 grid gap-3 sm:grid-cols-2">{slots.map((slot, index) => <div key={slot.slot} className="rounded-xl bg-zinc-950/50 p-3"><label className="block">Echo {slot.slot} · Cost {slot.cost}<select className="mt-2 w-full rounded-xl bg-zinc-950 p-3" value={echoKeys[index] ?? ""} onChange={(e) => setEchoKeys((items) => items.map((item, i) => i === index ? e.target.value : item))}>{data.echoes.filter((item) => item.cost === slot.cost).map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label><label className="mt-3 block">Main stat<select className="mt-2 w-full rounded-xl bg-zinc-950 p-3" value={mainStats[index] ?? ""} onChange={(e) => setMainStats((items) => items.map((item, i) => i === index ? e.target.value : item))}>{optionsFor(slot.cost).map((item) => <option key={item.statKey} value={item.statKey}>{statLabels[item.statKey]} +{item.value}%</option>)}</select></label></div>)}</div></section>
+      <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6"><h2 className="font-bold">Substats</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{trackedStats.map((key) => <label key={key}>{statLabels[key]}<input className="mt-2 w-full rounded-xl bg-zinc-950 p-3" min="0" step="0.1" type="number" value={subStats[key] ?? ""} onChange={(e) => setSubStats((current) => ({ ...current, [key]: Math.max(0, Number(e.target.value) || 0) }))} /></label>)}</div></section>
+      {buffs.length > 0 && <section className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6"><h2 className="font-bold">Conditional buffs</h2>{buffs.map((buff) => <label className="mt-3 flex gap-3" key={buff.id}><input type="checkbox" checked={activeBuffIds.includes(buff.id)} onChange={() => setActiveBuffIds((items) => items.includes(buff.id) ? items.filter((id) => id !== buff.id) : [...items, buff.id])} /><span>{buff.label}</span></label>)}</section>}
+    </section>
+    <aside className="h-fit rounded-3xl border border-violet-500/30 bg-zinc-900 p-6 lg:sticky lg:top-6"><p className="text-sm text-violet-300">CALCULATED RESULT</p>{calculation && <><p className="mt-3 text-3xl font-black">ATK {format(calculation.result.attack)}</p><dl className="mt-4 grid grid-cols-2 gap-3 text-sm">{([["CRIT Rate", calculation.result.critRate], ["CRIT DMG", calculation.result.critDamage], ["Energy Regen", calculation.result.energyRegen], ["Fusion DMG", calculation.result.fusionDamageBonus]] as const).map(([label, value]) => <div className="rounded-xl bg-zinc-950 p-3" key={label}><dt className="text-zinc-500">{label}</dt><dd className="font-bold">{format(value)}%</dd></div>)}</dl>{calculation.grade && <p className="mt-4 text-sm text-zinc-300">Grade: {calculation.grade.grade ?? "Not graded"}</p>}</>}
+      <div className="mt-6 border-t border-zinc-700 pt-5"><input className="w-full rounded-xl bg-zinc-950 p-3" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} /><div className="mt-3 flex gap-3"><button className="rounded-xl bg-violet-500 px-4 py-2 font-bold disabled:opacity-50" disabled={saving || !name.trim()} onClick={save}>{saving ? "Saving…" : profileId ? "Update build" : "Save build"}</button><button className="rounded-xl border border-zinc-700 px-4 py-2" onClick={newBuild}>New</button></div>{message && <p className="mt-3 text-sm text-zinc-300">{message}</p>}</div>
+      <div className="mt-6 border-t border-zinc-700 pt-5"><h2 className="font-bold">Saved builds</h2>{profiles.length === 0 ? <p className="mt-3 text-sm text-zinc-500">No saved builds.</p> : <ul className="mt-3 space-y-3">{profiles.map((profile) => <li className="flex items-center justify-between gap-2" key={profile.id}><button className="min-w-0 truncate text-left text-sm font-semibold" onClick={() => load(profile)}>{profile.name}</button><button className="text-xs text-rose-300" onClick={() => remove(profile.id)}>Delete</button></li>)}</ul>}</div>
+    </aside></div>
+  </main>;
 }

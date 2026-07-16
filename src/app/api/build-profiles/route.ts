@@ -40,8 +40,13 @@ export async function POST(request: Request) {
       },
     })),
     activeBuffIds: parsed.data.activeBuffIds,
-  }, CHANGLI_LUPA_BRANT_BUFFS);
-  const calculatedResult = { ...result, grade: evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS).grade };
+  }, character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS : []);
+  const calculatedResult = {
+    ...result,
+    grade: character.externalKey === "changli"
+      ? evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS).grade
+      : null,
+  };
   const [profile] = await getDb().insert(buildProfiles).values({
     userId: user.id,
     characterId: character.id,
