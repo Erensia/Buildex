@@ -23,3 +23,18 @@
 - 장루브 파티의 실제 스탯 계산식, 버프 발동 조건, 목표 등급별 수치를 정의한다.
 - 회원가입 입력 항목, 계정 복구, 탈퇴 및 개인정보 처리 정책을 구체화한다.
 - 장루브 MVP의 화면 와이어프레임과 API 명세를 작성한다.
+
+## 2026-07-16 — 프로젝트 기반 구축 완료
+
+- `Erensia/Buildex` 저장소에 Next.js App Router, TypeScript, Tailwind CSS 기반 프로젝트를 초기화하고 첫 커밋 `e5944f2`를 `main`에 반영했다.
+- Docker PostgreSQL 16 구성, Drizzle ORM 스키마와 초기 마이그레이션을 추가했다. 실제 스키마는 `users`, `auth_identities`, `games`, `characters`, `weapons`, `echoes`, `build_profiles`로 구성된다.
+- 이메일 중복 검사, Zod 입력 검증, bcrypt 비밀번호 해시를 사용하는 회원가입 API와 Auth.js Credentials 로그인 흐름을 구현했다.
+- 에코 5개 빌드 입력 검증과 Vitest 테스트를 추가했다. ESLint, 단위 테스트, 프로덕션 빌드, Docker Compose 설정 검증을 통과했다.
+- 기획 문서와 실제 구현의 차이를 반영해 ERD의 `equipment`를 `echoes`로, `character_specs`를 `build_profiles`로 정정했다. 즐겨찾기와 파티 시뮬레이션 모델은 아직 추가하지 않았다.
+
+## 다음 개발 작업
+
+- 명조 게임 데이터(장리, 루파, 브랜트, 무기, 에코 세트)와 데이터 버전 시드 추가
+- 독립 스탯 계산 엔진, 파티 버프 조건, 목표 등급 판정 규칙 구현 및 단위 테스트
+- 빌드 입력·저장·결과 비교 화면 구현
+- 세션 표시, 로그아웃, 보호 경로와 원래 경로 복귀 구현

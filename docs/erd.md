@@ -1,30 +1,25 @@
-# Buildex 데이터 모델 초안
+# Buildex 데이터 모델
 
-> 버전: 0.1 · 작성일: 2026-07-16 · 구현 전 검토용
+> 버전: 0.2 · 작성일: 2026-07-16 · 상태: 기반 구축 반영
 
 ## 1. 모델링 원칙
 
-- `users`는 서비스의 주체이며, 로그인 수단과 분리한다.
-- `auth_identities`는 이메일/비밀번호 및 향후 OAuth 제공자를 한 모델로 수용한다.
-- 게임 콘텐츠는 게임 단위로 분리하고, 캐릭터·장비·무기는 공개 데이터로 관리한다.
-- 개인화 데이터는 반드시 `user_id`를 가져 사용자별 접근 제어의 기준이 된다.
-- 스펙·시뮬레이션 결과에는 적용한 데이터와 계산식 버전을 기록할 수 있어야 한다.
+- `users`와 `auth_identities`를 분리해 자체 로그인과 후속 OAuth를 함께 수용한다.
+- 공개 게임 데이터는 게임 단위로 묶고, 외부 식별자와 데이터 버전을 함께 기록한다.
+- 사용자 빌드는 입력값과 계산 결과를 JSON 스냅샷으로 저장하며, 게임 데이터·계산식 버전을 명시한다.
+- 아직 구현하지 않은 즐겨찾기·파티 시뮬레이션은 스키마에 섣불리 넣지 않는다. 요구사항이 확정되면 별도 마이그레이션으로 추가한다. 미래의 나에게 애매한 빈 테이블을 물려주지 않는 편이 낫다.
 
-## 2. ERD
+## 2. 구현된 ERD
 
 ```mermaid
 erDiagram
     USERS ||--o{ AUTH_IDENTITIES : has
+    USERS ||--o{ BUILD_PROFILES : owns
     GAMES ||--o{ CHARACTERS : contains
-    GAMES ||--o{ EQUIPMENT : contains
     GAMES ||--o{ WEAPONS : contains
-    USERS ||--o{ CHARACTER_SPECS : owns
-    CHARACTERS ||--o{ CHARACTER_SPECS : based_on
-    USERS ||--o{ FAVORITES : owns
-    CHARACTERS ||--o{ FAVORITES : bookmarked
-    USERS ||--o{ PARTY_SIMULATIONS : owns
-    PARTY_SIMULATIONS ||--o{ PARTY_MEMBERS : includes
-    CHARACTERS ||--o{ PARTY_MEMBERS : selected
+    GAMES ||--o{ ECHOES : contains
+    CHARACTERS ||--o{ BUILD_PROFILES : selected_for
+    WEAPONS ||--o{ BUILD_PROFILES : selected_for
 
     USERS {
         uuid id PK
@@ -39,8 +34,8 @@ erDiagram
         string provider
         string provider_subject
         string password_hash
-        datetime created_at
         datetime last_login_at
+        datetime created_at
     }
     GAMES {
         uuid id PK
@@ -56,14 +51,7 @@ erDiagram
         string name
         string role
         string data_version
-    }
-    EQUIPMENT {
-        uuid id PK
-        uuid game_id FK
-        string external_key
-        string name
-        string equipment_type
-        string data_version
+        json base_stats
     }
     WEAPONS {
         uuid id PK
@@ -72,66 +60,53 @@ erDiagram
         string name
         string weapon_type
         string data_version
+        json stats
     }
-    CHARACTER_SPECS {
+    ECHOES {
         uuid id PK
-        uuid user_id FK
-        uuid character_id FK
-        string name
-        json spec_input
-        json calculated_result
-        string formula_version
-        datetime created_at
-        datetime updated_at
-    }
-    FAVORITES {
-        uuid id PK
-        uuid user_id FK
-        uuid character_id FK
-        datetime created_at
-    }
-    PARTY_SIMULATIONS {
-        uuid id PK
-        uuid user_id FK
         uuid game_id FK
+        string external_key
         string name
-        json result
+        integer cost
+        string data_version
+        json stats
+    }
+    BUILD_PROFILES {
+        uuid id PK
+        uuid user_id FK
+        uuid character_id FK
+        uuid weapon_id FK
+        string name
+        json build_input
+        json calculated_result
+        string data_version
         string formula_version
         datetime created_at
         datetime updated_at
-    }
-    PARTY_MEMBERS {
-        uuid id PK
-        uuid party_simulation_id FK
-        uuid character_id FK
-        integer slot_index
-        uuid character_spec_id FK
     }
 ```
 
-## 3. 핵심 테이블 정의
+## 3. 구현된 테이블과 제약
 
 | 테이블 | 용도 | 주요 제약 |
 | --- | --- | --- |
-| `users` | 서비스 사용자 | `email` 고유, 탈퇴/상태 관리 컬럼은 정책 확정 후 추가 |
-| `auth_identities` | 로그인 수단 | `(provider, provider_subject)` 고유; password provider만 `password_hash` 사용 |
-| `games` | 지원 게임 | `slug` 고유, 데이터 버전 관리 |
-| `characters` | 공개 캐릭터 정보 | 게임 내 외부 식별자와 조합해 고유 처리 |
-| `equipment`, `weapons` | 공개 아이템 정보 | 게임별 분류와 데이터 버전 보유 |
-| `character_specs` | 회원 저장 스펙 | `user_id`로 소유권 검증, 입력값과 결과 스냅샷 저장 |
-| `favorites` | 회원 즐겨찾기 | `(user_id, character_id)` 고유 |
-| `party_simulations` | 회원 파티 계산 | 사용자·게임·계산식 버전 보유 |
-| `party_members` | 파티 구성원 | 시뮬레이션 내 `slot_index` 고유 |
+| `users` | 서비스 사용자 | `email` 고유 |
+| `auth_identities` | 로그인 수단 | `(provider, provider_subject)` 고유, 비밀번호는 해시만 저장 |
+| `games` | 지원 게임 | `slug` 고유, 현재 데이터 버전 보유 |
+| `characters` | 공개 캐릭터 데이터 | `(game_id, external_key)` 고유 |
+| `weapons` | 공개 무기 데이터 | `(game_id, external_key)` 고유 |
+| `echoes` | 공개 에코 데이터 | `(game_id, external_key)` 고유, 코스트와 기본 수치 저장 |
+| `build_profiles` | 사용자 빌드 프리셋 | 사용자 소유, 캐릭터·무기 참조, 입력·결과·버전 스냅샷 저장 |
 
-## 4. 인증 제공자 설계
+## 4. 기획 대비 변경점
 
-`auth_identities.provider` 예시는 `password`, `google`, `kakao`, `naver`다. 자체 가입은 `provider=password`, `provider_subject=정규화된 이메일`로 기록하고 비밀번호 해시는 `password_hash`에만 저장한다. OAuth 제공자는 제공자가 반환한 안정적 사용자 식별자를 `provider_subject`에 저장한다.
+- 초기 초안의 일반 `equipment`는 명조 MVP의 실제 도메인에 맞춰 `echoes`로 구체화했다.
+- 초기 초안의 `character_specs`는 에코 5개 묶음을 이름으로 저장한다는 요구사항에 맞춰 `build_profiles`로 변경했다.
+- `favorites`, `party_simulations`, `party_members`는 아직 미구현이다. 해당 기능 구현 시 소유권, 슬롯 중복, 게임별 파티 규칙을 확정한 뒤 마이그레이션으로 추가한다.
+- `build_profiles.calculated_result`는 계산식 변경 후에도 과거 결과를 재현·비교하기 위한 스냅샷이다.
 
-하나의 `users` 레코드에 복수의 인증 수단을 연결할 수 있다. 단, 이메일 일치만으로 외부 계정을 자동 연결하지 않는다. 자동 연결은 계정 탈취 위험이 있으므로, 로그인된 사용자의 명시적 연결 또는 검증된 계정 복구 절차를 통해서만 허용한다.
+## 5. 인증 제공자 설계
 
-## 5. 구현 시 확인할 사항
+`auth_identities.provider`는 현재 `password`를 사용한다. `provider_subject`에는 정규화한 이메일을 저장하고, `password_hash`에는 bcrypt 해시만 저장한다. 이후 `google`, `kakao`, `naver` 등을 추가할 때에는 제공자가 발급하는 안정적 식별자를 `provider_subject`로 사용한다.
 
-- 아이템의 세부 옵션을 정규화할지 JSON 속성으로 저장할지는 첫 지원 게임의 데이터 복잡도를 확인한 뒤 결정한다.
-- 캐릭터 스펙 결과를 재현할 수 있도록 `data_version`, `formula_version`을 결과 스냅샷에 포함한다.
-- 즐겨찾기는 캐릭터만 대상으로 시작한다. 장비·무기 즐겨찾기는 필요 시 별도 테이블 또는 대상 타입 확장으로 추가한다.
-- 파티 조합 규칙(최대 인원, 역할 중복 등)은 게임별 설정 테이블로 분리할 여지가 있다.
+외부 계정은 이메일이 같다는 이유만으로 자동 연결하지 않는다. 로그인된 사용자의 명시적 연결 또는 검증된 계정 복구 절차를 통해서만 연결한다.
