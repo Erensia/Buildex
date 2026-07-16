@@ -10,7 +10,18 @@ export async function getCurrentUser() {
   const email = session?.user?.email?.toLowerCase();
   if (!email) return null;
 
-  return getDb().query.users.findFirst({ where: eq(users.email, email) });
+  const db = getDb();
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  if (!user) return null;
+
+  // The configured bootstrap address is the only account automatically promoted.
+  // All other role changes must be made directly in the database by an administrator.
+  const bootstrapEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (bootstrapEmail && user.email === bootstrapEmail && user.role !== "admin") {
+    const [admin] = await db.update(users).set({ role: "admin", updatedAt: new Date() }).where(eq(users.id, user.id)).returning();
+    return admin;
+  }
+  return user;
 }
 
 export async function getBuildProfilesForUser(userId: string) {

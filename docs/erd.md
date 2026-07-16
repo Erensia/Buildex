@@ -17,7 +17,7 @@ erDiagram
 
 | 테이블 | 역할 |
 | --- | --- |
-| `users` | 사용자 계정 |
+| `users` | 사용자 계정과 역할(`user` / `admin`) |
 | `auth_identities` | 인증 제공자 식별자와 비밀번호 해시 |
 | `games` | 게임 메타데이터와 데이터 버전 |
 | `characters` | 캐릭터 기본 스탯과 무기 타입 |

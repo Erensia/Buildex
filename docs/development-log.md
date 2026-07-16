@@ -1,5 +1,12 @@
 # Buildex 개발 로그
 
+## 2026-07-16 — 관리자 게임 데이터 운영
+
+- `users.role`과 관리자 부트스트랩(`ADMIN_EMAIL`)을 추가했다. 일반 회원가입 계정은 기본 역할 `user`로 생성되며, 관리자 API는 서버에서 역할을 다시 검사한다.
+- `/admin`과 `/api/admin/game-data`를 추가해 게임, 캐릭터, 무기, 에코, 에코 세트, 주옵션, 세트 구성을 등록·수정·삭제할 수 있게 했다.
+- 입력은 Zod로 데이터 버전, 검증 날짜, 출처 URL 및 식별자를 검증한다. 기존 레코드를 불러와 JSON으로 편집할 수 있고, 같은 식별자로 저장하면 갱신된다.
+- `pnpm lint`, `pnpm build`, `pnpm test`를 통과했다.
+
 ## 2026-07-16 — 기반 구축
 
 - Next.js, PostgreSQL, Drizzle ORM, Auth.js Credentials 기반을 구성했다.
