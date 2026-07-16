@@ -15,6 +15,20 @@
       "when": 1784181000000,
       "tag": "0001_verified_wuthering_waves_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784185200000,
+      "tag": "0002_complete_mvp_echo_options",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784188800000,
+      "tag": "0003_validate_echo_memberships",
+      "breakpoints": true
     }
   ]
 }
