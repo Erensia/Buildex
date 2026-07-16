@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { getCurrentUser, getOwnedBuildProfile } from "@/lib/build-profiles";
+import { getCurrentUser, getOwnedBuildProfile, validateBuildReferences } from "@/lib/build-profiles";
 import { getDb } from "@/lib/db/client";
 import { buildProfiles } from "@/lib/db/schema";
 import { buildInputSchema } from "@/lib/validation/build";
@@ -34,7 +34,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const profile = await getOwnedBuildProfile(id, user.id);
   if (!profile) return NextResponse.json({ error: "Build profile not found." }, { status: 404 });
 
-  const { character, weapon, sets } = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey));
+  const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey));
+  const referenceError = validateBuildReferences(parsed.data, references);
+  if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
+  const { character, weapon, sets } = references;
   if (!character || !weapon) return NextResponse.json({ error: "Selected character or weapon was not found." }, { status: 400 });
   const setEffects = resolveEchoSetEffects(parsed.data.echoes.map((echo) => echo.setKey), sets.map((set) => ({ externalKey: set.externalKey, name: set.name, effects: set.effects as Record<string, unknown> })));
   const result = calculateBuildStats({

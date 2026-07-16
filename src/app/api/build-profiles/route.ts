@@ -3,7 +3,7 @@ import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-cal
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
 import { FORMULA_VERSION } from "@/lib/formula/versions";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
-import { getBuildProfilesForUser, getBuildReferences, getCurrentUser } from "@/lib/build-profiles";
+import { getBuildProfilesForUser, getBuildReferences, getCurrentUser, validateBuildReferences } from "@/lib/build-profiles";
 import { getDb } from "@/lib/db/client";
 import { buildProfiles } from "@/lib/db/schema";
 import { buildInputSchema } from "@/lib/validation/build";
@@ -26,7 +26,10 @@ export async function POST(request: Request) {
 
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-  const { character, weapon, sets } = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey));
+  const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey));
+  const referenceError = validateBuildReferences(parsed.data, references);
+  if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
+  const { character, weapon, sets } = references;
   if (!character || !weapon) return NextResponse.json({ error: "지원하지 않는 캐릭터 또는 무기입니다." }, { status: 400 });
 
   const setEffects = resolveEchoSetEffects(parsed.data.echoes.map((echo) => echo.setKey), sets.map((set) => ({ externalKey: set.externalKey, name: set.name, effects: set.effects as Record<string, unknown> })));

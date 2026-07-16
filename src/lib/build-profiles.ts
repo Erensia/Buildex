@@ -2,7 +2,8 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
-import { buildProfiles, characters, echoSets, users, weapons } from "@/lib/db/schema";
+import { buildProfiles, characters, echoes, echoSetEchoes, echoSets, users, weapons } from "@/lib/db/schema";
+import type { BuildInput } from "@/lib/validation/build";
 
 export async function getCurrentUser() {
   const session = await getServerSession(authOptions);
@@ -19,12 +20,34 @@ export async function getBuildProfilesForUser(userId: string) {
   });
 }
 
-export async function getBuildReferences(characterKey: string, weaponKey: string, setKeys: string[] = []) {
+export async function getBuildReferences(characterKey: string, weaponKey: string, setKeys: string[] = [], echoKeys: string[] = []) {
   const db = getDb();
   const character = await db.query.characters.findFirst({ where: eq(characters.externalKey, characterKey) });
   const weapon = await db.query.weapons.findFirst({ where: eq(weapons.externalKey, weaponKey) });
   const sets = setKeys.length ? await db.query.echoSets.findMany({ where: inArray(echoSets.externalKey, setKeys) }) : [];
-  return { character, weapon, sets };
+  const selectedEchoes = echoKeys.length ? await db.query.echoes.findMany({ where: inArray(echoes.externalKey, echoKeys) }) : [];
+  const memberships = selectedEchoes.length && sets.length
+    ? await db.select().from(echoSetEchoes).where(and(inArray(echoSetEchoes.echoId, selectedEchoes.map((echo) => echo.id)), inArray(echoSetEchoes.echoSetId, sets.map((set) => set.id))))
+    : [];
+  const mainStats = await db.query.echoMainStats.findMany();
+  return { character, weapon, sets, selectedEchoes, memberships, mainStats };
+}
+
+export function validateBuildReferences(input: BuildInput, references: Awaited<ReturnType<typeof getBuildReferences>>) {
+  const { character, weapon, sets, selectedEchoes, memberships, mainStats } = references;
+  if (!character || !weapon) return "Selected character or weapon was not found.";
+  const weaponType = (character.baseStats as { weaponType?: string }).weaponType;
+  if (weaponType && weapon.weaponType !== weaponType) return "The selected weapon is not compatible with this character.";
+  if (sets.length !== new Set(input.echoes.map((echo) => echo.setKey)).size) return "One or more selected echo sets were not found.";
+  if (selectedEchoes.length !== new Set(input.echoes.map((echo) => echo.echoKey)).size) return "One or more selected echoes were not found.";
+  for (const echo of input.echoes) {
+    const selectedEcho = selectedEchoes.find((item) => item.externalKey === echo.echoKey);
+    const set = sets.find((item) => item.externalKey === echo.setKey);
+    if (!selectedEcho || !set || selectedEcho.cost !== echo.cost) return "An echo does not match its selected slot cost.";
+    if (!memberships.some((membership) => membership.echoId === selectedEcho.id && membership.echoSetId === set.id)) return "The selected echo does not belong to its selected set.";
+    if (!mainStats.some((stat) => stat.cost === echo.cost && stat.statKey === echo.mainStat)) return "The selected main stat is not valid for this echo slot.";
+  }
+  return null;
 }
 
 export async function getOwnedBuildProfile(id: string, userId: string) {
