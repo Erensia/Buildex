@@ -43,6 +43,12 @@
 
 - 창리 빌드는 다음 등급에 도달하기 위해 부족한 스탯을 결과 패널에서 바로 확인할 수 있게 했다.
 
+## 2026-07-16 — 로컬 환경 설정 안정화
+
+- `.env.local`에 로컬 데이터베이스 연결 정보와 고정 `NEXTAUTH_SECRET`, `NEXTAUTH_URL`을 추가했다.
+- JWT 세션 복호화 오류를 방지하기 위해 NextAuth secret을 개발 서버 재시작 시에도 유지하도록 했다.
+- `drizzle.config.ts`가 `.env.local`을 자동으로 읽도록 `dotenv`를 추가해, 마이그레이션 시 별도의 환경변수 명령이 필요 없게 했다.
+
 ## 보류 항목
 
 - Google, Kakao, Naver 소셜 로그인
