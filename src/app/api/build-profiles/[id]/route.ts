@@ -7,6 +7,7 @@ import { buildInputSchema } from "@/lib/validation/build";
 import { getBuildReferences } from "@/lib/build-profiles";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
+import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 
 const mainStatValues: Record<number, Record<string, number>> = {
   1: { attackPercent: 18 },
@@ -33,18 +34,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const profile = await getOwnedBuildProfile(id, user.id);
   if (!profile) return NextResponse.json({ error: "Build profile not found." }, { status: 404 });
 
-  const { character, weapon } = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey);
+  const { character, weapon, sets } = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey));
   if (!character || !weapon) return NextResponse.json({ error: "Selected character or weapon was not found." }, { status: 400 });
+  const setEffects = resolveEchoSetEffects(parsed.data.echoes.map((echo) => echo.setKey), sets.map((set) => ({ externalKey: set.externalKey, name: set.name, effects: set.effects as Record<string, unknown> })));
   const result = calculateBuildStats({
     character: { id: character.externalKey, label: character.name, stats: character.baseStats as { baseAttack?: number; critRate?: number } },
     weapon: { id: weapon.externalKey, label: weapon.name, stats: weapon.stats as { baseAttack?: number; critDamage?: number } },
-    echoes: parsed.data.echoes.map((echo) => ({
+    echoes: [...parsed.data.echoes.map((echo) => ({
       id: `echo-${echo.slot}`,
       label: `Echo ${echo.slot}`,
       stats: { [echo.mainStat]: mainStatValues[echo.cost][echo.mainStat] ?? 0, ...Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) },
-    })),
+    })), ...setEffects.automaticSources],
     activeBuffIds: parsed.data.activeBuffIds,
-  }, character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS : []);
+  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS : []), ...setEffects.conditionalBuffs]);
   const calculatedResult = {
     ...result,
     grade: character.externalKey === "changli"

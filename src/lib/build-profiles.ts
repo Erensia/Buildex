@@ -1,8 +1,8 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
-import { buildProfiles, characters, users, weapons } from "@/lib/db/schema";
+import { buildProfiles, characters, echoSets, users, weapons } from "@/lib/db/schema";
 
 export async function getCurrentUser() {
   const session = await getServerSession(authOptions);
@@ -19,11 +19,12 @@ export async function getBuildProfilesForUser(userId: string) {
   });
 }
 
-export async function getBuildReferences(characterKey: string, weaponKey: string) {
+export async function getBuildReferences(characterKey: string, weaponKey: string, setKeys: string[] = []) {
   const db = getDb();
   const character = await db.query.characters.findFirst({ where: eq(characters.externalKey, characterKey) });
   const weapon = await db.query.weapons.findFirst({ where: eq(weapons.externalKey, weaponKey) });
-  return { character, weapon };
+  const sets = setKeys.length ? await db.query.echoSets.findMany({ where: inArray(echoSets.externalKey, setKeys) }) : [];
+  return { character, weapon, sets };
 }
 
 export async function getOwnedBuildProfile(id: string, userId: string) {
