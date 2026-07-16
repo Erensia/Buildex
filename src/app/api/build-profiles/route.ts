@@ -7,12 +7,7 @@ import { getBuildProfilesForUser, getBuildReferences, getCurrentUser, validateBu
 import { getDb } from "@/lib/db/client";
 import { buildProfiles } from "@/lib/db/schema";
 import { buildInputSchema } from "@/lib/validation/build";
-
-const mainStatValues: Record<number, Record<string, number>> = {
-  1: { attackPercent: 18 },
-  3: { fusionDamageBonus: 30, attackPercent: 30, energyRegen: 32 },
-  4: { critRate: 22, critDamage: 44, attackPercent: 33 },
-};
+import { getEchoStatSources } from "@/lib/build-calculation";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -36,14 +31,7 @@ export async function POST(request: Request) {
   const result = calculateBuildStats({
     character: { id: character.externalKey, label: character.name, stats: character.baseStats as { baseAttack?: number; critRate?: number } },
     weapon: { id: weapon.externalKey, label: weapon.name, stats: weapon.stats as { baseAttack?: number; critDamage?: number } },
-    echoes: [...parsed.data.echoes.map((echo) => ({
-      id: `echo-${echo.slot}`,
-      label: `에코 ${echo.slot}`,
-      stats: {
-        [echo.mainStat]: mainStatValues[echo.cost][echo.mainStat] ?? 0,
-        ...Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])),
-      },
-    })), ...setEffects.automaticSources],
+    echoes: [...getEchoStatSources(parsed.data, references.mainStats), ...setEffects.automaticSources],
     activeBuffIds: parsed.data.activeBuffIds,
   }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon.externalKey === "blazing-brilliance") : []), ...setEffects.conditionalBuffs]);
   const calculatedResult = {

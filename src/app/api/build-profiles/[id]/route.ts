@@ -8,12 +8,7 @@ import { getBuildReferences } from "@/lib/build-profiles";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
-
-const mainStatValues: Record<number, Record<string, number>> = {
-  1: { attackPercent: 18 },
-  3: { fusionDamageBonus: 30, attackPercent: 30, energyRegen: 32 },
-  4: { critRate: 22, critDamage: 44, attackPercent: 33 },
-};
+import { getEchoStatSources } from "@/lib/build-calculation";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -43,11 +38,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const result = calculateBuildStats({
     character: { id: character.externalKey, label: character.name, stats: character.baseStats as { baseAttack?: number; critRate?: number } },
     weapon: { id: weapon.externalKey, label: weapon.name, stats: weapon.stats as { baseAttack?: number; critDamage?: number } },
-    echoes: [...parsed.data.echoes.map((echo) => ({
-      id: `echo-${echo.slot}`,
-      label: `Echo ${echo.slot}`,
-      stats: { [echo.mainStat]: mainStatValues[echo.cost][echo.mainStat] ?? 0, ...Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) },
-    })), ...setEffects.automaticSources],
+    echoes: [...getEchoStatSources(parsed.data, references.mainStats), ...setEffects.automaticSources],
     activeBuffIds: parsed.data.activeBuffIds,
   }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon.externalKey === "blazing-brilliance") : []), ...setEffects.conditionalBuffs]);
   const calculatedResult = {
