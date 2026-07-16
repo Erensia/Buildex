@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type AuthFormProps = { mode: "signin" | "signup" };
+type AuthFormProps = { mode: "signin" | "signup"; callbackUrl?: string };
 
-export function AuthForm({ mode }: AuthFormProps) {
+export function AuthForm({ mode, callbackUrl }: AuthFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
@@ -33,7 +33,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     }
     const result = await signIn("credentials", { email, password, redirect: false });
     if (result?.error) setError("이메일 또는 비밀번호를 확인해 주세요.");
-    else router.push("/");
+    else router.push(callbackUrl ?? "/build");
     setLoading(false);
   }
 

@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -26,7 +26,9 @@ export const games = pgTable("games", {
   id: uuid("id").defaultRandom().primaryKey(),
   slug: varchar("slug", { length: 80 }).notNull().unique(),
   name: varchar("name", { length: 120 }).notNull(),
-  currentDataVersion: varchar("current_data_version", { length: 32 }).notNull(),
+  currentDataVersion: varchar("current_data_version", { length: 32 }),
+  sourceSnapshot: varchar("source_snapshot", { length: 10 }),
+  sourceUrl: text("source_url"),
   isActive: boolean("is_active").default(true).notNull(),
   ...timestamps,
 });
@@ -37,7 +39,9 @@ export const characters = pgTable("characters", {
   externalKey: varchar("external_key", { length: 80 }).notNull(),
   name: varchar("name", { length: 80 }).notNull(),
   role: varchar("role", { length: 40 }).notNull(),
-  dataVersion: varchar("data_version", { length: 32 }).notNull(),
+  dataVersion: varchar("data_version", { length: 32 }),
+  sourceSnapshot: varchar("source_snapshot", { length: 10 }).notNull(),
+  sourceUrl: text("source_url").notNull(),
   baseStats: jsonb("base_stats").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("character_game_key_idx").on(table.gameId, table.externalKey)]);
@@ -48,7 +52,9 @@ export const weapons = pgTable("weapons", {
   externalKey: varchar("external_key", { length: 80 }).notNull(),
   name: varchar("name", { length: 80 }).notNull(),
   weaponType: varchar("weapon_type", { length: 40 }).notNull(),
-  dataVersion: varchar("data_version", { length: 32 }).notNull(),
+  dataVersion: varchar("data_version", { length: 32 }),
+  sourceSnapshot: varchar("source_snapshot", { length: 10 }).notNull(),
+  sourceUrl: text("source_url").notNull(),
   stats: jsonb("stats").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("weapon_game_key_idx").on(table.gameId, table.externalKey)]);
@@ -59,10 +65,40 @@ export const echoes = pgTable("echoes", {
   externalKey: varchar("external_key", { length: 80 }).notNull(),
   name: varchar("name", { length: 80 }).notNull(),
   cost: integer("cost").notNull(),
-  dataVersion: varchar("data_version", { length: 32 }).notNull(),
+  dataVersion: varchar("data_version", { length: 32 }),
+  sourceSnapshot: varchar("source_snapshot", { length: 10 }).notNull(),
+  sourceUrl: text("source_url").notNull(),
   stats: jsonb("stats").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("echo_game_key_idx").on(table.gameId, table.externalKey)]);
+
+export const echoSets = pgTable("echo_sets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  externalKey: varchar("external_key", { length: 80 }).notNull(),
+  name: varchar("name", { length: 80 }).notNull(),
+  dataVersion: varchar("data_version", { length: 32 }),
+  sourceSnapshot: varchar("source_snapshot", { length: 10 }).notNull(),
+  sourceUrl: text("source_url").notNull(),
+  effects: jsonb("effects").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("echo_set_game_key_idx").on(table.gameId, table.externalKey)]);
+
+export const echoSetEchoes = pgTable("echo_set_echoes", {
+  echoSetId: uuid("echo_set_id").notNull().references(() => echoSets.id, { onDelete: "cascade" }),
+  echoId: uuid("echo_id").notNull().references(() => echoes.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.echoSetId, table.echoId] })]);
+
+export const echoMainStats = pgTable("echo_main_stats", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  cost: integer("cost").notNull(),
+  statKey: varchar("stat_key", { length: 80 }).notNull(),
+  value: integer("value").notNull(),
+  dataVersion: varchar("data_version", { length: 32 }),
+  sourceSnapshot: varchar("source_snapshot", { length: 10 }).notNull(),
+  sourceUrl: text("source_url").notNull(),
+}, (table) => [uniqueIndex("echo_main_stat_game_cost_key_idx").on(table.gameId, table.cost, table.statKey)]);
 
 export const buildProfiles = pgTable("build_profiles", {
   id: uuid("id").defaultRandom().primaryKey(),
