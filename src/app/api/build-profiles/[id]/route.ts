@@ -11,6 +11,7 @@ import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
 import { HIYUKI_CHISA_LUCILLA_BUFFS, HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/hiyuki-chisa-lucilla";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import { getEchoStatSources } from "@/lib/build-calculation";
+import { FORMULA_VERSION } from "@/lib/formula/versions";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -31,7 +32,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const profile = await getOwnedBuildProfile(id, user.id);
   if (!profile) return NextResponse.json({ error: "Build profile not found." }, { status: 404 });
 
-  const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey));
+  const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey), profile.dataReleaseId);
   const referenceError = validateBuildReferences(parsed.data, references);
   if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
   const { character, weapon, sets, release } = references;
@@ -61,7 +62,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     calculatedResult,
     dataVersion: release.version,
     dataReleaseId: release.id,
-    formulaVersion: parsed.data.formulaVersion,
+    formulaVersion: FORMULA_VERSION,
     updatedAt: new Date(),
   }).where(eq(buildProfiles.id, profile.id)).returning();
   return NextResponse.json(updated);

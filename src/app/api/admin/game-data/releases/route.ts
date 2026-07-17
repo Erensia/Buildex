@@ -51,11 +51,16 @@ export async function POST(request: Request) {
     const validation = await validateRelease(parsed.data.releaseId);
     if (!validation.release || validation.errors.length) return NextResponse.json({ error: "발행 검증을 통과하지 못했습니다.", errors: validation.errors }, { status: 400 });
     if (validation.release.status !== "draft") return NextResponse.json({ error: "초안 릴리스만 발행할 수 있습니다." }, { status: 400 });
-    await db.transaction(async (tx) => {
-      await tx.update(gameDataReleases).set({ status: "superseded" }).where(and(eq(gameDataReleases.gameId, validation.release!.gameId), eq(gameDataReleases.status, "published")));
-      await tx.update(gameDataReleases).set({ status: "published", publishedAt: new Date() }).where(eq(gameDataReleases.id, validation.release!.id));
-      await tx.update(games).set({ currentDataReleaseId: validation.release!.id, currentDataVersion: validation.release!.version, sourceSnapshot: validation.release!.sourceSnapshot, updatedAt: new Date() }).where(eq(games.id, validation.release!.gameId));
-    });
+    try {
+      await db.transaction(async (tx) => {
+        await tx.update(gameDataReleases).set({ status: "superseded" }).where(and(eq(gameDataReleases.gameId, validation.release!.gameId), eq(gameDataReleases.status, "published")));
+        const [published] = await tx.update(gameDataReleases).set({ status: "published", publishedAt: new Date() }).where(and(eq(gameDataReleases.id, validation.release!.id), eq(gameDataReleases.status, "draft"))).returning({ id: gameDataReleases.id });
+        if (!published) throw new Error("릴리스 상태가 변경되어 발행할 수 없습니다.");
+        await tx.update(games).set({ currentDataReleaseId: validation.release!.id, currentDataVersion: validation.release!.version, sourceSnapshot: validation.release!.sourceSnapshot, updatedAt: new Date() }).where(eq(games.id, validation.release!.gameId));
+      });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "다른 발행 작업과 충돌했습니다. 다시 시도해 주세요." }, { status: 409 });
+    }
     return NextResponse.json({ ok: true });
   }
 

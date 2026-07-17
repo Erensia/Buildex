@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/build-profiles";
 import { getDb } from "@/lib/db/client";
 import { echoSetEchoes, echoMainStats, echoes as echoesTable, echoSets as echoSetsTable, characters as charactersTable, weapons as weaponsTable } from "@/lib/db/schema";
-import { getCurrentPublishedRelease } from "@/lib/game-data-releases";
+import { getPublicRelease } from "@/lib/game-data-releases";
 import { eq, inArray } from "drizzle-orm";
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
 
   const db = getDb();
-  const current = await getCurrentPublishedRelease();
+  const releaseIdParam = new URL(request.url).searchParams.get("releaseId") ?? undefined;
+  const current = await getPublicRelease(releaseIdParam);
   if (!current) return NextResponse.json({ error: "공개된 게임 데이터가 없습니다." }, { status: 503 });
   const releaseId = current.release.id;
   const [games, characters, weapons, echoes, echoSets, mainStats, echoSetMemberships] = await Promise.all([
