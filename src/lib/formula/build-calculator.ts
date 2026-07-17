@@ -38,6 +38,7 @@ export function calculateBuildStats(
     energyRegen: round(stats.energyRegen ?? 100),
     fusionDamageBonus: round(stats.fusionDamageBonus ?? 0),
     spectroDamageBonus: round(stats.spectroDamageBonus ?? 0),
+    glacioDamageBonus: round(stats.glacioDamageBonus ?? 0),
     resonanceSkillDamageBonus: round(stats.resonanceSkillDamageBonus ?? 0),
   };
 }

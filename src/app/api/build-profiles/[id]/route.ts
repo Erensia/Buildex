@@ -8,6 +8,7 @@ import { getBuildReferences } from "@/lib/build-profiles";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
 import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
+import { HIYUKI_CHISA_LUCILLA_BUFFS, HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/hiyuki-chisa-lucilla";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import { getEchoStatSources } from "@/lib/build-calculation";
 
@@ -41,13 +42,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     weapon: { id: weapon.externalKey, label: weapon.name, stats: weapon.stats as { baseAttack?: number; critDamage?: number } },
     echoes: [...getEchoStatSources(parsed.data, references.mainStats), ...setEffects.automaticSources],
     activeBuffIds: parsed.data.activeBuffIds,
-  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon.externalKey === "blazing-brilliance") : []), ...setEffects.conditionalBuffs]);
+  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon.externalKey === "blazing-brilliance") : character.externalKey === "hiyuki" ? HIYUKI_CHISA_LUCILLA_BUFFS : []), ...setEffects.conditionalBuffs]);
   const calculatedResult = {
     ...result,
     grade: character.externalKey === "changli"
       ? evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS).grade
       : character.externalKey === "zani"
         ? evaluateBuildGrade(result, ZANI_S0_GRADE_REQUIREMENTS).grade
+        : character.externalKey === "hiyuki"
+          ? evaluateBuildGrade(result, HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS).grade
         : null,
   };
   const [updated] = await getDb().update(buildProfiles).set({

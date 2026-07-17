@@ -29,7 +29,7 @@ describe("buildInputSchema", () => {
   it("accepts Spectro DMG Bonus as an echo substat", () => {
     const result = buildInputSchema.safeParse({
       name: "Spectro build", characterKey: "zani", weaponKey: "weapon", formulaVersion: "ww-3.5.0",
-      echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "spectroDamageBonus", value: 10 }] : [] })),
+      echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "spectroDamageBonus", value: 10.1 }] : [] })),
     });
     expect(result.success).toBe(true);
   });
@@ -55,6 +55,14 @@ describe("buildInputSchema", () => {
     const result = buildInputSchema.safeParse({
       name: "Test", characterKey: "changli", weaponKey: "weapon", formulaVersion: "ww-2.0.0",
       echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "critRate", value: 8 }, { key: "critRate", value: 7 }] : [] })),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a substat value that is not an in-game Echo roll", () => {
+    const result = buildInputSchema.safeParse({
+      name: "Invalid roll", characterKey: "changli", weaponKey: "weapon", formulaVersion: "ww-2.0.0",
+      echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "critRate", value: 8 }] : [] })),
     });
     expect(result.success).toBe(false);
   });

@@ -6,11 +6,13 @@ import { signOut } from "next-auth/react";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
 import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
+import { HIYUKI_CHISA_LUCILLA_BUFFS, HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/hiyuki-chisa-lucilla";
 import { FORMULA_VERSION } from "@/lib/formula/versions";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import type { StatKey, StatValues } from "@/lib/formula/stats";
 import { getSubstatQuality } from "@/lib/formula/substat-analysis";
 import { getImprovementActions } from "@/lib/formula/build-improvements";
+import { echoSubstatRolls } from "@/lib/formula/echo-substats";
 
 type Character = { externalKey: string; name: string; baseStats: StatValues & { weaponType?: string } };
 type Weapon = { externalKey: string; name: string; weaponType: string; stats: StatValues };
@@ -19,11 +21,11 @@ type EchoSet = { id: string; externalKey: string; name: string; effects: Record<
 type MainStat = { cost: 1 | 3 | 4; statKey: StatKey; value: number };
 type BuildData = { games: { name: string; currentDataVersion: string | null; sourceSnapshot: string | null; sourceUrl: string | null }[]; characters: Character[]; weapons: Weapon[]; echoes: Echo[]; echoSets: EchoSet[]; mainStats: MainStat[]; echoSetMemberships: { echoSetId: string; echoId: string }[] };
 type BuildInput = { name: string; characterKey: string; weaponKey: string; echoes: { slot: number; echoKey?: string; setKey: string; cost: 1 | 3 | 4; mainStat: string; subStats: { key: string; value: number }[] }[]; activeBuffIds: string[]; formulaVersion: string };
-type SavedProfile = { id: string; name: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number; energyRegen: number; fusionDamageBonus: number; spectroDamageBonus?: number; resonanceSkillDamageBonus: number; grade?: string | null } };
+type SavedProfile = { id: string; name: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number; energyRegen: number; fusionDamageBonus: number; spectroDamageBonus?: number; glacioDamageBonus?: number; resonanceSkillDamageBonus: number; grade?: string | null } };
 
 const slots: { slot: number; cost: 1 | 3 | 4 }[] = [{ slot: 1, cost: 4 }, { slot: 2, cost: 3 }, { slot: 3, cost: 3 }, { slot: 4, cost: 1 }, { slot: 5, cost: 1 }];
-const statLabels: Record<StatKey, string> = { baseAttack: "Base ATK", flatAttack: "Flat ATK", attackPercent: "ATK %", critRate: "CRIT Rate", critDamage: "CRIT DMG", energyRegen: "Energy Regen", fusionDamageBonus: "Fusion DMG", spectroDamageBonus: "Spectro DMG", resonanceSkillDamageBonus: "Resonance Skill DMG" };
-const trackedStats: StatKey[] = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus"];
+const statLabels: Record<StatKey, string> = { baseAttack: "기초 공격력", flatAttack: "공격력", attackPercent: "공격력 %", flatHealth: "HP", healthPercent: "HP %", flatDefense: "방어력", defensePercent: "방어력 %", critRate: "치명타 확률", critDamage: "치명타 피해", energyRegen: "공명 효율", fusionDamageBonus: "용융 피해 보너스", spectroDamageBonus: "회절 피해 보너스", glacioDamageBonus: "응결 피해 보너스", resonanceSkillDamageBonus: "공명 스킬 피해 보너스" };
+const trackedStats = Object.keys(echoSubstatRolls) as (keyof typeof echoSubstatRolls)[];
 const inputClass = "mt-2 w-full rounded-xl border border-white/8 bg-zinc-950/80 px-3 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/15";
 
 function format(value: number) { return Number.isInteger(value) ? String(value) : value.toFixed(1); }
@@ -60,7 +62,9 @@ export function BuildPlanner({ userName }: { userName: string }) {
   const character = data?.characters.find((item) => item.externalKey === characterKey);
   const compatibleWeapons = useMemo(() => data?.weapons.filter((weapon) => !character?.baseStats.weaponType || weapon.weaponType === character.baseStats.weaponType) ?? [], [data, character]);
   const weapon = compatibleWeapons.find((item) => item.externalKey === weaponKey) ?? compatibleWeapons[0];
-  const buffs = useMemo(() => characterKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon?.externalKey === "blazing-brilliance") : [], [characterKey, weapon?.externalKey]);
+  const buffs = useMemo(() => characterKey === "changli"
+    ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon?.externalKey === "blazing-brilliance")
+    : characterKey === "hiyuki" ? HIYUKI_CHISA_LUCILLA_BUFFS : [], [characterKey, weapon?.externalKey]);
   const optionsFor = useCallback((cost: 1 | 3 | 4) => data?.mainStats.filter((item) => item.cost === cost) ?? [], [data]);
   const echoesFor = useCallback((setKey: string, cost: 1 | 3 | 4) => {
     const echoSet = data?.echoSets.find((item) => item.externalKey === setKey);
@@ -80,6 +84,8 @@ export function BuildPlanner({ userName }: { userName: string }) {
       ? CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS
       : characterKey === "zani"
         ? ZANI_S0_GRADE_REQUIREMENTS
+        : characterKey === "hiyuki"
+          ? HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS
         : null;
     return { result, grade: gradeRequirements ? evaluateBuildGrade(result, gradeRequirements) : null, conditionalSetBuffs: setEffects.conditionalBuffs };
   }, [activeBuffIds, buffs, character, characterKey, data?.echoSets, mainStats, optionsFor, setKeys, subStats, weapon]);
@@ -95,7 +101,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
 
   if (!data) return <main className="grid min-h-screen place-items-center bg-zinc-950 text-sm text-zinc-400">빌드 데이터를 불러오는 중…</main>;
   const game = data.games[0];
-  const statCards = [["CRIT Rate", calculation?.result.critRate ?? 0], ["CRIT DMG", calculation?.result.critDamage ?? 0], ["Energy Regen", calculation?.result.energyRegen ?? 0], ["Fusion DMG", calculation?.result.fusionDamageBonus ?? 0], ["Spectro DMG", calculation?.result.spectroDamageBonus ?? 0]] as const;
+  const statCards = [["CRIT Rate", calculation?.result.critRate ?? 0], ["CRIT DMG", calculation?.result.critDamage ?? 0], ["Energy Regen", calculation?.result.energyRegen ?? 0], ["Fusion DMG", calculation?.result.fusionDamageBonus ?? 0], ["Spectro DMG", calculation?.result.spectroDamageBonus ?? 0], ["Glacio DMG", calculation?.result.glacioDamageBonus ?? 0]] as const;
 
   return <main className="min-h-screen bg-[radial-gradient(circle_at_85%_0%,rgba(124,58,237,.16),transparent_30rem),#09090b] pb-16 text-zinc-100">
     <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
@@ -115,7 +121,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
 
           <section className="rounded-2xl border border-white/10 bg-zinc-900/65 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="mb-5 flex items-center gap-3"><span className="grid size-7 place-items-center rounded-full bg-violet-500 text-xs font-black">2</span><div><h2 className="font-bold">에코 세팅</h2><p className="text-xs text-zinc-500">코스트와 세트에 맞는 주옵션을 선택하세요.</p></div></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{slots.map((slot, index) => <div key={slot.slot} className="rounded-xl border border-white/8 bg-zinc-950/45 p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Echo {slot.slot}</h3><span className="rounded-full bg-white/8 px-2 py-0.5 text-xs font-bold text-zinc-300">Cost {slot.cost}</span></div><label className="block text-xs text-zinc-400">에코<select className={inputClass} value={echoKeys[index] ?? ""} onChange={(e) => setEchoKeys((items) => items.map((item, i) => i === index ? e.target.value : item))}>{echoesFor(setKeys[index] ?? "", slot.cost).map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label><label className="mt-3 block text-xs text-zinc-400">세트<select className={inputClass} value={setKeys[index] ?? ""} onChange={(e) => { const nextSetKey = e.target.value; setSetKeys((items) => items.map((item, i) => i === index ? nextSetKey : item)); setEchoKeys((items) => items.map((item, i) => i === index ? (echoesFor(nextSetKey, slot.cost)[0]?.externalKey ?? "") : item)); }}>{data.echoSets.map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label><label className="mt-3 block text-xs text-zinc-400">주옵션<select className={inputClass} value={mainStats[index] ?? ""} onChange={(e) => setMainStats((items) => items.map((item, i) => i === index ? e.target.value : item))}>{optionsFor(slot.cost).map((item) => <option key={item.statKey} value={item.statKey}>{statLabels[item.statKey]} +{item.value}%</option>)}</select></label></div>)}</div></section>
 
-          <section className="rounded-2xl border border-white/10 bg-zinc-900/65 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="mb-5 flex items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="grid size-7 place-items-center rounded-full bg-violet-500 text-xs font-black">3</span><div><h2 className="font-bold">부옵션</h2><p className="text-xs text-zinc-500">에코별 세부 수치를 입력합니다.</p></div></div><span className="hidden text-xs text-zinc-500 sm:block">각 항목 0–100</span></div><div className="space-y-5">{slots.map((slot, index) => { const quality = getSubstatQuality(subStats[index] ?? {}); return <div key={slot.slot} className="border-t border-white/8 pt-5 first:border-0 first:pt-0"><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-bold">Echo {slot.slot}</h3><span className="text-xs font-semibold text-violet-300">부옵션 {quality.count}/5 · 품질 {format(quality.score)}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{trackedStats.map((key) => <label key={key} className="text-xs font-medium text-zinc-400">{statLabels[key]}<input className={inputClass} min="0" max="100" step="0.1" type="number" value={subStats[index]?.[key] ?? ""} onChange={(e) => setSubStats((current) => current.map((stats, statIndex) => statIndex === index ? { ...stats, [key]: Math.min(100, Math.max(0, Number(e.target.value) || 0)) } : stats))} /></label>)}</div></div>; })}</div></section>
+          <section className="rounded-2xl border border-white/10 bg-zinc-900/65 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="mb-5 flex items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="grid size-7 place-items-center rounded-full bg-violet-500 text-xs font-black">3</span><div><h2 className="font-bold">부옵션</h2><p className="text-xs text-zinc-500">명조 에코의 실제 부옵션 롤 수치에서 선택합니다.</p></div></div><span className="hidden text-xs text-zinc-500 sm:block">에코당 최대 5개</span></div><div className="space-y-5">{slots.map((slot, index) => { const quality = getSubstatQuality(subStats[index] ?? {}); return <div key={slot.slot} className="border-t border-white/8 pt-5 first:border-0 first:pt-0"><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-bold">Echo {slot.slot}</h3><span className="text-xs font-semibold text-violet-300">부옵션 {quality.count}/5 · 품질 {format(quality.score)}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{trackedStats.map((key) => { const selectedValue = subStats[index]?.[key]; const isAtLimit = quality.count >= 5 && selectedValue === undefined; const isFlatValue = key === "flatAttack" || key === "flatHealth" || key === "flatDefense"; return <label key={key} className="text-xs font-medium text-zinc-400">{statLabels[key]}<select className={inputClass} disabled={isAtLimit} value={selectedValue ?? ""} onChange={(e) => setSubStats((current) => current.map((stats, statIndex) => { if (statIndex !== index) return stats; if (!e.target.value) return Object.fromEntries(Object.entries(stats).filter(([statKey]) => statKey !== key)) as StatValues; return { ...stats, [key]: Number(e.target.value) }; }))}><option value="">선택 안 함</option>{echoSubstatRolls[key].map((value) => <option key={value} value={value}>+{format(value)}{isFlatValue ? "" : "%"}</option>)}</select></label>; })}</div></div>; })}</div></section>
 
           {(buffs.length > 0 || calculation?.conditionalSetBuffs.length) && <section className="rounded-2xl border border-white/10 bg-zinc-900/65 p-5 sm:p-6"><h2 className="font-bold">조건부 버프</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{[...buffs, ...(calculation?.conditionalSetBuffs ?? [])].map((buff) => <label className="flex cursor-pointer gap-3 rounded-xl border border-white/8 bg-zinc-950/40 p-3 text-sm transition hover:border-violet-400/40" key={buff.id}><input className="mt-0.5 accent-violet-500" type="checkbox" checked={activeBuffIds.includes(buff.id)} onChange={() => setActiveBuffIds((items) => items.includes(buff.id) ? items.filter((id) => id !== buff.id) : [...items, buff.id])} /><span><strong className="block font-medium text-zinc-200">{buff.label}</strong><small className="text-zinc-500">{buff.condition}</small></span></label>)}</div></section>}
         </section>
