@@ -1,4 +1,5 @@
-export const FORMULA_VERSION = "ww-2.0.0";
+// This version identifies the server-side formula bundle, not a client claim.
+export const FORMULA_VERSION = "ww-3.5.0";
 
 export const BUILD_GRADE = ["standard", "good", "excellent"] as const;
 

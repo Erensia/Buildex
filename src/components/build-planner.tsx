@@ -19,9 +19,9 @@ type Weapon = { externalKey: string; name: string; weaponType: string; stats: St
 type Echo = { id: string; externalKey: string; name: string; cost: 1 | 3 | 4 };
 type EchoSet = { id: string; externalKey: string; name: string; effects: Record<string, unknown> };
 type MainStat = { cost: 1 | 3 | 4; statKey: StatKey; value: number };
-type BuildData = { games: { name: string; currentDataVersion: string | null; sourceSnapshot: string | null; sourceUrl: string | null }[]; characters: Character[]; weapons: Weapon[]; echoes: Echo[]; echoSets: EchoSet[]; mainStats: MainStat[]; echoSetMemberships: { echoSetId: string; echoId: string }[] };
+type BuildData = { games: { name: string; currentDataVersion: string | null; sourceSnapshot: string | null; sourceUrl: string | null; releaseId: string }[]; characters: Character[]; weapons: Weapon[]; echoes: Echo[]; echoSets: EchoSet[]; mainStats: MainStat[]; echoSetMemberships: { echoSetId: string; echoId: string }[] };
 type BuildInput = { name: string; characterKey: string; weaponKey: string; echoes: { slot: number; echoKey?: string; setKey: string; cost: 1 | 3 | 4; mainStat: string; subStats: { key: string; value: number }[] }[]; activeBuffIds: string[]; formulaVersion: string };
-type SavedProfile = { id: string; name: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number; energyRegen: number; fusionDamageBonus: number; spectroDamageBonus?: number; glacioDamageBonus?: number; resonanceSkillDamageBonus: number; grade?: string | null } };
+type SavedProfile = { id: string; name: string; dataReleaseId: string | null; dataVersion: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number; energyRegen: number; fusionDamageBonus: number; spectroDamageBonus?: number; glacioDamageBonus?: number; resonanceSkillDamageBonus: number; grade?: string | null } };
 
 const slots: { slot: number; cost: 1 | 3 | 4 }[] = [{ slot: 1, cost: 4 }, { slot: 2, cost: 3 }, { slot: 3, cost: 3 }, { slot: 4, cost: 1 }, { slot: 5, cost: 1 }];
 const statLabels: Record<StatKey, string> = { baseAttack: "기초 공격력", flatAttack: "공격력", attackPercent: "공격력 %", flatHealth: "HP", healthPercent: "HP %", flatDefense: "방어력", defensePercent: "방어력 %", critRate: "치명타 확률", critDamage: "치명타 피해", energyRegen: "공명 효율", fusionDamageBonus: "용융 피해 보너스", spectroDamageBonus: "회절 피해 보너스", glacioDamageBonus: "응결 피해 보너스", basicAttackDamageBonus: "일반 공격 피해 보너스", heavyAttackDamageBonus: "강공격 피해 보너스", resonanceSkillDamageBonus: "공명 스킬 피해 보너스", resonanceLiberationDamageBonus: "공명 해방 피해 보너스" };
@@ -34,6 +34,7 @@ function formatStat(value: number, stat: string) { return `${format(value)}${per
 
 export function BuildPlanner({ userName }: { userName: string }) {
   const [data, setData] = useState<BuildData>();
+  const [latestData, setLatestData] = useState<BuildData>();
   const [profiles, setProfiles] = useState<SavedProfile[]>([]);
   const [profileId, setProfileId] = useState<string>();
   const [comparisonProfileId, setComparisonProfileId] = useState<string>();
@@ -57,7 +58,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
         return;
       }
       const buildData = loadedData as BuildData;
-      setData(buildData); setProfiles(profilesResponse.ok && Array.isArray(loadedProfiles) ? loadedProfiles as SavedProfile[] : []);
+      setData(buildData); setLatestData(buildData); setProfiles(profilesResponse.ok && Array.isArray(loadedProfiles) ? loadedProfiles as SavedProfile[] : []);
       const character = buildData.characters[0]; const echoSet = buildData.echoSets[0];
       if (character) setCharacterKey(character.externalKey);
       if (echoSet) setSetKeys(slots.map(() => echoSet.externalKey));
@@ -102,9 +103,10 @@ export function BuildPlanner({ userName }: { userName: string }) {
 
   function payload(): BuildInput { return { name, characterKey, weaponKey: weaponKey || weapon?.externalKey || "", echoes: slots.map((slot, index) => ({ slot: slot.slot, echoKey: echoKeys[index], setKey: setKeys[index] ?? "", cost: slot.cost, mainStat: mainStats[index], subStats: Object.entries(subStats[index] ?? {}).map(([key, value]) => ({ key, value: value ?? 0 })) })), activeBuffIds, formulaVersion: FORMULA_VERSION }; }
   async function save() { setSaving(true); setMessage(undefined); const response = await fetch(profileId ? `/api/build-profiles/${profileId}` : "/api/build-profiles", { method: profileId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) }); const body = await response.json().catch(() => null); if (!response.ok) setMessage(body?.error ?? "빌드를 저장하지 못했습니다."); else { setProfiles((current) => profileId ? current.map((item) => item.id === body.id ? body : item) : [body, ...current]); setProfileId(body.id); setMessage("빌드를 저장했습니다."); } setSaving(false); }
-  function load(profile: SavedProfile) { const input = profile.buildInput; setProfileId(profile.id); setName(input.name); setCharacterKey(input.characterKey); setWeaponKey(input.weaponKey); setSetKeys(input.echoes.map((echo) => echo.setKey)); setEchoKeys(input.echoes.map((echo) => echo.echoKey ?? "")); setMainStats(input.echoes.map((echo) => echo.mainStat)); setSubStats(input.echoes.map((echo) => Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) as StatValues)); setActiveBuffIds(input.activeBuffIds); setMessage(`${profile.name}을 불러왔습니다.`); }
-  function newBuild() { setProfileId(undefined); setName("새 빌드"); setSubStats(slots.map(() => ({}))); setActiveBuffIds([]); setMessage("새 빌드를 만들 준비가 됐습니다."); }
-  function duplicate(profile: SavedProfile) { load(profile); setProfileId(undefined); setName(`${profile.name} 복사본`); setMessage("복사본을 저장하면 별도 빌드로 생성됩니다."); }
+  function applyInput(input: BuildInput) { setName(input.name); setCharacterKey(input.characterKey); setWeaponKey(input.weaponKey); setSetKeys(input.echoes.map((echo) => echo.setKey)); setEchoKeys(input.echoes.map((echo) => echo.echoKey ?? "")); setMainStats(input.echoes.map((echo) => echo.mainStat)); setSubStats(input.echoes.map((echo) => Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) as StatValues)); setActiveBuffIds(input.activeBuffIds); }
+  async function load(profile: SavedProfile) { const loadedReleaseId = data?.games[0]?.releaseId; if (profile.dataReleaseId && profile.dataReleaseId !== loadedReleaseId) { const response = await fetch(`/api/build-data?releaseId=${encodeURIComponent(profile.dataReleaseId)}`); const historicalData = await response.json().catch(() => null); if (!response.ok) { setMessage(historicalData?.error ?? "저장 당시의 게임 데이터를 불러올 수 없습니다."); return; } setData(historicalData as BuildData); } applyInput(profile.buildInput); setProfileId(profile.id); setMessage(`${profile.name}을 저장 당시 데이터(v${profile.dataVersion})로 불러왔습니다.`); }
+  function newBuild() { if (latestData) setData(latestData); setProfileId(undefined); setName("새 빌드"); setSubStats(slots.map(() => ({}))); setActiveBuffIds([]); setMessage("현재 공개 데이터로 새 빌드를 만듭니다."); }
+  function duplicate(profile: SavedProfile) { if (latestData) setData(latestData); applyInput(profile.buildInput); setProfileId(undefined); setName(`${profile.name} 복사본`); setMessage("현재 공개 데이터로 복사했습니다. 호환되지 않는 선택지는 저장 전에 조정해 주세요."); }
   async function remove(id: string) { if (!window.confirm("이 빌드를 삭제할까요? 이 작업은 되돌릴 수 없습니다.")) return; const response = await fetch(`/api/build-profiles/${id}`, { method: "DELETE" }); if (response.ok) { setProfiles((items) => items.filter((item) => item.id !== id)); if (profileId === id) newBuild(); } }
 
   if (!data) return <main className="grid min-h-screen place-items-center bg-zinc-950 text-sm text-zinc-400">빌드 데이터를 불러오는 중…</main>;
