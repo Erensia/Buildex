@@ -29,6 +29,20 @@
       "when": 1784188800000,
       "tag": "0003_validate_echo_memberships",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784282400000,
+      "tag": "0004_add_user_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784289600000,
+      "tag": "0005_restore_game_data_uuid_defaults",
+      "breakpoints": true
     }
   ]
 }

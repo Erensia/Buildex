@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { isValidEchoSubstatRoll } from "@/lib/formula/echo-substats";
 
-const subStatKeys = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus"] as const;
+const subStatKeys = ["flatAttack", "attackPercent", "flatHealth", "healthPercent", "flatDefense", "defensePercent", "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus", "glacioDamageBonus"] as const;
 
 export const echoSchema = z.object({
   slot: z.number().int().min(1).max(5),
@@ -12,6 +13,7 @@ export const echoSchema = z.object({
     const seenKeys = new Set<string>();
     for (const [index, subStat] of subStats.entries()) {
       if (seenKeys.has(subStat.key)) context.addIssue({ code: "custom", path: [index, "key"], message: "Each substat can only appear once per echo." });
+      if (!isValidEchoSubstatRoll(subStat.key, subStat.value)) context.addIssue({ code: "custom", path: [index, "value"], message: "Substat value must be a valid Echo roll." });
       seenKeys.add(subStat.key);
     }
   }),
