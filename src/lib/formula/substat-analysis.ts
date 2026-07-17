@@ -5,8 +5,10 @@ const weights: Partial<Record<keyof StatValues, number>> = {
   critRate: 2,
   critDamage: 1,
   energyRegen: 0.4,
-  fusionDamageBonus: 1,
-  spectroDamageBonus: 1,
+  normalAttackDamageBonus: 1,
+  heavyAttackDamageBonus: 1,
+  resonanceSkillDamageBonus: 1,
+  resonanceLiberationDamageBonus: 1,
 };
 
 export function getSubstatQuality(stats: StatValues) {
