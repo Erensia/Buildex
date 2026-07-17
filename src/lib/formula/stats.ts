@@ -14,7 +14,10 @@ export type StatKey =
   | "fusionDamageBonus"
   | "spectroDamageBonus"
   | "glacioDamageBonus"
-  | "resonanceSkillDamageBonus";
+  | "basicAttackDamageBonus"
+  | "heavyAttackDamageBonus"
+  | "resonanceSkillDamageBonus"
+  | "resonanceLiberationDamageBonus";
 
 export type StatValues = Partial<Record<StatKey, number>>;
 
@@ -43,7 +46,10 @@ export interface CalculatedStats {
   fusionDamageBonus: number;
   spectroDamageBonus: number;
   glacioDamageBonus: number;
+  basicAttackDamageBonus: number;
+  heavyAttackDamageBonus: number;
   resonanceSkillDamageBonus: number;
+  resonanceLiberationDamageBonus: number;
 }
 
 export interface GradeRequirement {

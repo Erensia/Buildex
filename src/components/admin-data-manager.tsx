@@ -3,93 +3,100 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-type Entity = "game" | "character" | "weapon" | "echo" | "echoSet" | "mainStat" | "echoSetMembership";
+type Entity = "character" | "weapon" | "echo" | "echoSet" | "mainStat" | "echoSetMembership";
+type Release = { id: string; gameId: string; version: string; status: "draft" | "published" | "superseded"; sourceSnapshot: string; sourceManifest: unknown; notes?: string | null; publishedAt?: string | null };
+type Game = { id: string; slug: string; name: string; currentDataReleaseId?: string | null };
 type Data = Record<string, Array<Record<string, unknown>>>;
 
+const labels: Record<Entity, string> = { character: "캐릭터", weapon: "무기", echo: "에코", echoSet: "에코 세트", mainStat: "에코 주옵션", echoSetMembership: "세트 구성" };
 const examples: Record<Entity, Record<string, unknown>> = {
-  game: { entity: "game", slug: "wuthering-waves", name: "명조: 워더링 웨이브", dataVersion: "3.5", sourceSnapshot: "2026-07-16", sourceUrl: "https://example.com/source", isActive: true },
-  character: { entity: "character", gameSlug: "wuthering-waves", externalKey: "example-character", name: "예시 캐릭터", role: "메인 딜러", dataVersion: "3.5", sourceSnapshot: "2026-07-16", sourceUrl: "https://example.com/source", baseStats: { baseAttack: 400, element: "fusion", weaponType: "sword", level: 90 } },
-  weapon: { entity: "weapon", gameSlug: "wuthering-waves", externalKey: "example-weapon", name: "예시 무기", weaponType: "sword", dataVersion: "3.5", sourceSnapshot: "2026-07-16", sourceUrl: "https://example.com/source", stats: { baseAttack: 500, level: 90, refinement: 1 } },
-  echo: { entity: "echo", gameSlug: "wuthering-waves", externalKey: "example-echo", name: "예시 에코", cost: 4, dataVersion: "3.5", sourceSnapshot: "2026-07-16", sourceUrl: "https://example.com/source", stats: {} },
-  echoSet: { entity: "echoSet", gameSlug: "wuthering-waves", externalKey: "example-set", name: "예시 세트", dataVersion: "3.5", sourceSnapshot: "2026-07-16", sourceUrl: "https://example.com/source", effects: { twoPiece: { fusionDamageBonus: 10 } } },
-  mainStat: { entity: "mainStat", gameSlug: "wuthering-waves", cost: 4, statKey: "critRate", value: 22, dataVersion: "3.5", sourceSnapshot: "2026-07-16", sourceUrl: "https://example.com/source" },
-  echoSetMembership: { entity: "echoSetMembership", gameSlug: "wuthering-waves", echoSetKey: "example-set", echoKey: "example-echo" },
+  character: { entity: "character", externalKey: "example-character", name: "예시 캐릭터", role: "메인 딜러", baseStats: { baseAttack: 400, element: "fusion", weaponType: "sword", level: 90 } },
+  weapon: { entity: "weapon", externalKey: "example-weapon", name: "예시 무기", weaponType: "sword", stats: { baseAttack: 500, level: 90, refinement: 1 } },
+  echo: { entity: "echo", externalKey: "example-echo", name: "예시 에코", cost: 4, stats: {} },
+  echoSet: { entity: "echoSet", externalKey: "example-set", name: "예시 세트", effects: { twoPiece: { fusionDamageBonus: 10 } } },
+  mainStat: { entity: "mainStat", cost: 4, statKey: "critRate", value: 22 },
+  echoSetMembership: { entity: "echoSetMembership", echoSetKey: "example-set", echoKey: "example-echo" },
 };
 
-const entityLabels: Record<Entity, string> = { game: "게임", character: "캐릭터", weapon: "무기", echo: "에코", echoSet: "에코 세트", mainStat: "에코 주옵션", echoSetMembership: "세트 구성" };
-
 export function AdminDataManager({ adminName }: { adminName: string }) {
+  const [games, setGames] = useState<Game[]>([]);
+  const [releases, setReleases] = useState<Release[]>([]);
+  const [releaseId, setReleaseId] = useState("");
   const [entity, setEntity] = useState<Entity>("character");
   const [payload, setPayload] = useState(() => JSON.stringify(examples.character, null, 2));
   const [data, setData] = useState<Data>({});
-  const [message, setMessage] = useState("데이터를 불러오는 중입니다.");
+  const [message, setMessage] = useState("릴리스 정보를 불러오는 중입니다.");
+  const release = releases.find((item) => item.id === releaseId);
+  const game = games.find((item) => item.id === release?.gameId);
+  const editable = release?.status === "draft";
 
-  async function load() {
-    const response = await fetch("/api/admin/game-data");
-    if (!response.ok) { setMessage("데이터를 불러오지 못했습니다."); return; }
-    setData(await response.json());
-    setMessage("");
+  async function loadReleases() {
+    const response = await fetch("/api/admin/game-data/releases");
+    if (!response.ok) throw new Error("릴리스 정보를 불러오지 못했습니다.");
+    const loaded = await response.json() as { games: Game[]; releases: Release[] };
+    setGames(loaded.games); setReleases(loaded.releases);
+    setReleaseId((current) => current || loaded.releases.find((item) => item.status === "draft")?.id || loaded.games[0]?.currentDataReleaseId || "");
+  }
+  async function loadData(id = releaseId) {
+    if (!id) return;
+    const response = await fetch(`/api/admin/game-data?releaseId=${encodeURIComponent(id)}`);
+    if (!response.ok) { setMessage("릴리스 데이터를 불러오지 못했습니다."); return; }
+    setData(await response.json() as Data);
   }
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/admin/game-data", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) { setMessage("데이터를 불러오지 못했습니다."); return; }
-        setData(await response.json() as Data);
-        setMessage("");
-      })
-      .catch((error: unknown) => { if ((error as { name?: string }).name !== "AbortError") setMessage("데이터를 불러오지 못했습니다."); });
+    void fetch("/api/admin/game-data/releases", { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("릴리스 정보를 불러오지 못했습니다.");
+      const loaded = await response.json() as { games: Game[]; releases: Release[] };
+      setGames(loaded.games); setReleases(loaded.releases);
+      setReleaseId((current) => current || loaded.releases.find((item) => item.status === "draft")?.id || loaded.games[0]?.currentDataReleaseId || ""); setMessage("");
+    }).catch((error: unknown) => { if ((error as { name?: string }).name !== "AbortError") setMessage((error as Error).message); });
     return () => controller.abort();
   }, []);
+  useEffect(() => {
+    if (!releaseId) return;
+    const controller = new AbortController();
+    void fetch(`/api/admin/game-data?releaseId=${encodeURIComponent(releaseId)}`, { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("릴리스 데이터를 불러오지 못했습니다."); setData(await response.json() as Data);
+    }).catch((error: unknown) => { if ((error as { name?: string }).name !== "AbortError") setMessage((error as Error).message); });
+    return () => controller.abort();
+  }, [releaseId]);
 
-  function changeEntity(next: Entity) {
-    setEntity(next);
-    setPayload(JSON.stringify(examples[next], null, 2));
+  async function createDraft() {
+    const version = prompt("새 데이터 버전", "3.6"); if (!version) return;
+    const sourceSnapshot = prompt("검증 날짜 (YYYY-MM-DD)", new Date().toISOString().slice(0, 10)); if (!sourceSnapshot) return;
+    const sourceManifest = release?.sourceManifest as { url?: string }[] | undefined;
+    const sourceUrl = prompt("대표 출처 URL (https:// 포함)", sourceManifest?.[0]?.url ?? ""); if (!sourceUrl || !game) return;
+    const response = await fetch("/api/admin/game-data/releases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "createDraft", gameSlug: game.slug, version, sourceSnapshot, sourceManifest: [{ label: `${version} 검증 출처`, url: sourceUrl }] }) });
+    const result = await response.json();
+    if (!response.ok) { const details = Array.isArray(result.details) ? result.details.map((item: { message?: string }) => item.message).join(" / ") : ""; setMessage(`${result.error ?? "초안을 만들지 못했습니다."}${details ? `: ${details}` : ""}`); return; }
+    await loadReleases(); setReleaseId(result.draft.id); setMessage(`${version} 초안을 만들었습니다. 공개 데이터는 아직 바뀌지 않았습니다.`);
   }
   async function save() {
-    let body: Record<string, unknown>;
-    try { body = JSON.parse(payload) as Record<string, unknown>; } catch { setMessage("JSON 형식을 확인해 주세요."); return; }
-    const response = await fetch("/api/admin/game-data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const result = await response.json();
-    if (!response.ok) { setMessage(result.error ?? "저장에 실패했습니다."); return; }
-    setMessage("저장했습니다. 같은 식별자로 다시 저장하면 수정됩니다.");
-    await load();
+    if (!editable || !release || !game) return;
+    try {
+      const body = JSON.parse(payload) as Record<string, unknown>;
+      const response = await fetch("/api/admin/game-data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, entity, releaseId: release.id, gameSlug: game.slug, dataVersion: release.version, sourceSnapshot: release.sourceSnapshot, sourceUrl: (body.sourceUrl as string | undefined) ?? (release.sourceManifest as { url?: string }[])?.[0]?.url }) });
+      const result = await response.json(); if (!response.ok) { setMessage(result.error ?? "저장에 실패했습니다."); return; }
+      setMessage("초안에 저장했습니다. 아직 사용자에게 공개되지 않습니다."); await loadData();
+    } catch { setMessage("JSON 형식을 확인해 주세요."); }
   }
-  const rows = useMemo(() => {
-    const key: Record<Entity, string> = { game: "games", character: "characters", weapon: "weapons", echo: "echoes", echoSet: "echoSets", mainStat: "mainStats", echoSetMembership: "memberships" };
-    return data[key[entity]] ?? [];
-  }, [data, entity]);
-  const gameSlugFor = (gameId: unknown) => (data.games ?? []).find((game) => game.id === gameId)?.slug as string | undefined;
-  function edit(row: Record<string, unknown>) {
-    const gameSlug = gameSlugFor(row.gameId);
-    let next: Record<string, unknown>;
-    if (entity === "game") next = { entity, slug: row.slug, name: row.name, dataVersion: row.currentDataVersion, sourceSnapshot: row.sourceSnapshot, sourceUrl: row.sourceUrl, isActive: row.isActive };
-    else if (entity === "character") next = { entity, gameSlug, externalKey: row.externalKey, name: row.name, role: row.role, dataVersion: row.dataVersion, sourceSnapshot: row.sourceSnapshot, sourceUrl: row.sourceUrl, baseStats: row.baseStats };
-    else if (entity === "weapon") next = { entity, gameSlug, externalKey: row.externalKey, name: row.name, weaponType: row.weaponType, dataVersion: row.dataVersion, sourceSnapshot: row.sourceSnapshot, sourceUrl: row.sourceUrl, stats: row.stats };
-    else if (entity === "echo") next = { entity, gameSlug, externalKey: row.externalKey, name: row.name, cost: row.cost, dataVersion: row.dataVersion, sourceSnapshot: row.sourceSnapshot, sourceUrl: row.sourceUrl, stats: row.stats };
-    else if (entity === "echoSet") next = { entity, gameSlug, externalKey: row.externalKey, name: row.name, dataVersion: row.dataVersion, sourceSnapshot: row.sourceSnapshot, sourceUrl: row.sourceUrl, effects: row.effects };
-    else if (entity === "mainStat") next = { entity, gameSlug, cost: row.cost, statKey: row.statKey, value: row.value, dataVersion: row.dataVersion, sourceSnapshot: row.sourceSnapshot, sourceUrl: row.sourceUrl };
-    else {
-      const set = (data.echoSets ?? []).find((item) => item.id === row.echoSetId);
-      const echo = (data.echoes ?? []).find((item) => item.id === row.echoId);
-      next = { entity, gameSlug: set && gameSlugFor(set.gameId), echoSetKey: set?.externalKey, echoKey: echo?.externalKey };
-    }
-    setPayload(JSON.stringify(next, null, 2));
+  async function validateAndPublish() {
+    if (!release || !editable) return;
+    const validationResponse = await fetch("/api/admin/game-data/releases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "validate", releaseId: release.id }) });
+    const validation = await validationResponse.json();
+    if (!validationResponse.ok || validation.errors?.length) { setMessage(`발행 검증 실패: ${(validation.errors ?? [validation.error]).join(" / ")}`); return; }
+    if (!confirm(`${release.version}을 공개합니다. 이전 공개 릴리스는 보존되지만 더 이상 플래너에 노출되지 않습니다.`)) return;
+    const response = await fetch("/api/admin/game-data/releases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "publish", releaseId: release.id }) });
+    const result = await response.json(); if (!response.ok) { setMessage(result.error ?? "발행하지 못했습니다."); return; }
+    await loadReleases(); setMessage(`${release.version}을 공개했습니다.`);
   }
-  async function remove(row: Record<string, unknown>) {
-    if (!confirm("이 데이터를 삭제할까요? 관련 빌드 데이터에 영향을 줄 수 있습니다.")) return;
-    const gameSlug = gameSlugFor(row.gameId);
-    const body = entity === "game" ? { entity, slug: row.slug } : entity === "mainStat" ? { entity, gameSlug, cost: row.cost, statKey: row.statKey } : entity === "echoSetMembership"
-      ? (() => { const set = (data.echoSets ?? []).find((item) => item.id === row.echoSetId); const echo = (data.echoes ?? []).find((item) => item.id === row.echoId); return { entity, gameSlug: set && gameSlugFor(set.gameId), echoSetKey: set?.externalKey, echoKey: echo?.externalKey }; })()
-      : { entity, gameSlug, externalKey: row.externalKey };
-    const response = await fetch("/api/admin/game-data", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    setMessage(response.ok ? "삭제했습니다." : "삭제하지 못했습니다.");
-    if (response.ok) await load();
-  }
+  const rows = useMemo(() => data[{ character: "characters", weapon: "weapons", echo: "echoes", echoSet: "echoSets", mainStat: "mainStats", echoSetMembership: "memberships" }[entity]] ?? [], [data, entity]);
 
   return <main className="min-h-screen bg-zinc-950 px-5 py-8 text-zinc-100 sm:px-8"><div className="mx-auto max-w-6xl">
-    <header className="mb-8 flex flex-wrap items-center justify-between gap-4"><div><p className="text-xs font-bold tracking-[.18em] text-violet-300">ADMINISTRATION</p><h1 className="mt-1 text-3xl font-black">게임 데이터 관리</h1><p className="mt-2 text-sm text-zinc-400">{adminName}님 · 저장 시 출처와 버전을 함께 검증합니다.</p></div><Link href="/build" className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold hover:bg-zinc-800">플래너로 이동</Link></header>
-    <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]"><section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"><label className="text-sm font-bold">데이터 종류</label><select value={entity} onChange={(event) => changeEntity(event.target.value as Entity)} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3">{(Object.keys(entityLabels) as Entity[]).map((key) => <option value={key} key={key}>{entityLabels[key]}</option>)}</select><p className="mt-4 text-sm leading-6 text-zinc-400">JSON을 수정해 저장하세요. 같은 게임과 식별자로 저장하면 기존 항목을 갱신합니다. 세트 구성은 연결만 추가합니다.</p><textarea value={payload} onChange={(event) => setPayload(event.target.value)} spellCheck={false} className="mt-4 h-[430px] w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs leading-5 text-zinc-200" /><button onClick={() => void save()} className="mt-4 w-full rounded-lg bg-violet-500 px-4 py-3 font-bold hover:bg-violet-400">저장 또는 수정</button>{message && <p className="mt-3 text-sm text-violet-200">{message}</p>}</section>
-    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"><div className="flex items-center justify-between"><h2 className="font-bold">등록된 {entityLabels[entity]}</h2><span className="text-sm text-zinc-400">{rows.length}개</span></div><div className="mt-4 max-h-[590px] space-y-2 overflow-y-auto">{rows.map((row, index) => <article key={String(row.id ?? `${row.echoSetId}-${row.echoId}`)} className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold">{String(row.name ?? row.slug ?? row.externalKey ?? `${row.statKey ?? "세트"} ${row.cost ?? ""}`)}</p><p className="mt-1 truncate font-mono text-xs text-zinc-500">{String(row.externalKey ?? row.statKey ?? row.id ?? index)}</p></div><div className="flex gap-2"><button onClick={() => edit(row)} className="rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">수정</button><button onClick={() => void remove(row)} className="rounded border border-red-900/80 px-2 py-1 text-xs text-red-300 hover:bg-red-950">삭제</button></div></div></article>)}{!rows.length && <p className="py-12 text-center text-sm text-zinc-500">등록된 데이터가 없습니다.</p>}</div></section></div>
+    <header className="mb-8 flex flex-wrap items-center justify-between gap-4"><div><p className="text-xs font-bold tracking-[.18em] text-violet-300">RELEASE ADMINISTRATION</p><h1 className="mt-1 text-3xl font-black">게임 데이터 릴리스</h1><p className="mt-2 text-sm text-zinc-400">{adminName}님 · 공개 데이터는 읽기 전용이며, 변경은 초안에서만 이뤄집니다.</p></div><Link href="/build" className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold hover:bg-zinc-800">플래너로 이동</Link></header>
+    <section className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"><div className="flex flex-wrap items-end gap-3"><label className="min-w-64 flex-1 text-sm font-bold">작업 릴리스<select value={releaseId} onChange={(event) => setReleaseId(event.target.value)} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3">{releases.map((item) => <option key={item.id} value={item.id}>{item.version} · {item.status} · {item.sourceSnapshot}</option>)}</select></label><button onClick={() => void createDraft()} disabled={!game} className="rounded-lg bg-violet-500 px-4 py-3 text-sm font-bold hover:bg-violet-400 disabled:opacity-50">현재 공개본에서 초안 만들기</button>{editable && <button onClick={() => void validateAndPublish()} className="rounded-lg border border-emerald-500/60 px-4 py-3 text-sm font-bold text-emerald-200 hover:bg-emerald-500/10">검증 후 Publish</button>}</div>{release && <p className="mt-3 text-sm text-zinc-400">{release.status === "draft" ? "초안: 저장해도 사용자에게 노출되지 않습니다." : release.status === "published" ? "현재 공개 릴리스: 직접 수정할 수 없습니다." : "보존된 과거 릴리스: 읽기 전용입니다."}</p>}</section>
+    <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]"><section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"><label className="text-sm font-bold">데이터 종류</label><select disabled={!editable} value={entity} onChange={(event) => { const next = event.target.value as Entity; setEntity(next); setPayload(JSON.stringify(examples[next], null, 2)); }} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 disabled:opacity-50">{(Object.keys(labels) as Entity[]).map((key) => <option value={key} key={key}>{labels[key]}</option>)}</select><p className="mt-4 text-sm leading-6 text-zinc-400">JSON은 선택한 초안에만 저장됩니다. 발행 전에는 언제든 안전하게 수정할 수 있습니다.</p><textarea disabled={!editable} value={payload} onChange={(event) => setPayload(event.target.value)} spellCheck={false} className="mt-4 h-[360px] w-full rounded-lg border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs leading-5 text-zinc-200 disabled:opacity-50" /><button disabled={!editable} onClick={() => void save()} className="mt-4 w-full rounded-lg bg-violet-500 px-4 py-3 font-bold hover:bg-violet-400 disabled:opacity-50">초안에 저장</button>{message && <p className="mt-3 text-sm text-violet-200">{message}</p>}</section>
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5"><div className="flex items-center justify-between"><h2 className="font-bold">{release?.version ?? ""} · {labels[entity]}</h2><span className="text-sm text-zinc-400">{rows.length}개</span></div><div className="mt-4 max-h-[540px] space-y-2 overflow-y-auto">{rows.map((row, index) => <article key={String(row.id ?? index)} className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3"><p className="font-semibold">{String(row.name ?? row.externalKey ?? row.statKey ?? "세트 구성")}</p><p className="mt-1 font-mono text-xs text-zinc-500">{String(row.externalKey ?? row.id ?? index)}</p></article>)}{!rows.length && <p className="py-12 text-center text-sm text-zinc-500">등록된 데이터가 없습니다.</p>}</div></section></div>
   </div></main>;
 }

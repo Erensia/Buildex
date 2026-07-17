@@ -43,6 +43,13 @@
       "when": 1784289600000,
       "tag": "0005_restore_game_data_uuid_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784358000000,
+      "tag": "0006_game_data_releases",
+      "breakpoints": true
     }
   ]
 }

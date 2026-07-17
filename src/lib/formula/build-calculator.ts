@@ -39,7 +39,10 @@ export function calculateBuildStats(
     fusionDamageBonus: round(stats.fusionDamageBonus ?? 0),
     spectroDamageBonus: round(stats.spectroDamageBonus ?? 0),
     glacioDamageBonus: round(stats.glacioDamageBonus ?? 0),
+    basicAttackDamageBonus: round(stats.basicAttackDamageBonus ?? 0),
+    heavyAttackDamageBonus: round(stats.heavyAttackDamageBonus ?? 0),
     resonanceSkillDamageBonus: round(stats.resonanceSkillDamageBonus ?? 0),
+    resonanceLiberationDamageBonus: round(stats.resonanceLiberationDamageBonus ?? 0),
   };
 }
 
