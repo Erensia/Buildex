@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const subStatKeys = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus"] as const;
+const subStatKeys = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus"] as const;
 
 export const echoSchema = z.object({
   slot: z.number().int().min(1).max(5),

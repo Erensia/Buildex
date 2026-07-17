@@ -5,6 +5,7 @@ import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
+import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
 import { FORMULA_VERSION } from "@/lib/formula/versions";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import type { StatKey, StatValues } from "@/lib/formula/stats";
@@ -18,11 +19,11 @@ type EchoSet = { id: string; externalKey: string; name: string; effects: Record<
 type MainStat = { cost: 1 | 3 | 4; statKey: StatKey; value: number };
 type BuildData = { games: { name: string; currentDataVersion: string | null; sourceSnapshot: string | null; sourceUrl: string | null }[]; characters: Character[]; weapons: Weapon[]; echoes: Echo[]; echoSets: EchoSet[]; mainStats: MainStat[]; echoSetMemberships: { echoSetId: string; echoId: string }[] };
 type BuildInput = { name: string; characterKey: string; weaponKey: string; echoes: { slot: number; echoKey?: string; setKey: string; cost: 1 | 3 | 4; mainStat: string; subStats: { key: string; value: number }[] }[]; activeBuffIds: string[]; formulaVersion: string };
-type SavedProfile = { id: string; name: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number; energyRegen: number; fusionDamageBonus: number; resonanceSkillDamageBonus: number; grade?: string | null } };
+type SavedProfile = { id: string; name: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number; energyRegen: number; fusionDamageBonus: number; spectroDamageBonus?: number; resonanceSkillDamageBonus: number; grade?: string | null } };
 
 const slots: { slot: number; cost: 1 | 3 | 4 }[] = [{ slot: 1, cost: 4 }, { slot: 2, cost: 3 }, { slot: 3, cost: 3 }, { slot: 4, cost: 1 }, { slot: 5, cost: 1 }];
-const statLabels: Record<StatKey, string> = { baseAttack: "Base ATK", flatAttack: "Flat ATK", attackPercent: "ATK %", critRate: "CRIT Rate", critDamage: "CRIT DMG", energyRegen: "Energy Regen", fusionDamageBonus: "Fusion DMG", resonanceSkillDamageBonus: "Resonance Skill DMG" };
-const trackedStats: StatKey[] = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus"];
+const statLabels: Record<StatKey, string> = { baseAttack: "Base ATK", flatAttack: "Flat ATK", attackPercent: "ATK %", critRate: "CRIT Rate", critDamage: "CRIT DMG", energyRegen: "Energy Regen", fusionDamageBonus: "Fusion DMG", spectroDamageBonus: "Spectro DMG", resonanceSkillDamageBonus: "Resonance Skill DMG" };
+const trackedStats: StatKey[] = ["flatAttack", "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus"];
 const inputClass = "mt-2 w-full rounded-xl border border-white/8 bg-zinc-950/80 px-3 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/15";
 
 function format(value: number) { return Number.isInteger(value) ? String(value) : value.toFixed(1); }
@@ -75,7 +76,12 @@ export function BuildPlanner({ userName }: { userName: string }) {
     });
     const setEffects = resolveEchoSetEffects(setKeys, data?.echoSets ?? []);
     const result = calculateBuildStats({ character: { id: character.externalKey, label: character.name, stats: character.baseStats }, weapon: { id: weapon.externalKey, label: weapon.name, stats: weapon.stats }, echoes: [...echoes, ...setEffects.automaticSources], activeBuffIds }, [...buffs, ...setEffects.conditionalBuffs]);
-    return { result, grade: characterKey === "changli" ? evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS) : null, conditionalSetBuffs: setEffects.conditionalBuffs };
+    const gradeRequirements = characterKey === "changli"
+      ? CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS
+      : characterKey === "zani"
+        ? ZANI_S0_GRADE_REQUIREMENTS
+        : null;
+    return { result, grade: gradeRequirements ? evaluateBuildGrade(result, gradeRequirements) : null, conditionalSetBuffs: setEffects.conditionalBuffs };
   }, [activeBuffIds, buffs, character, characterKey, data?.echoSets, mainStats, optionsFor, setKeys, subStats, weapon]);
   const comparisonProfile = profiles.find((profile) => profile.id === comparisonProfileId);
   const improvementActions = calculation?.grade ? getImprovementActions(calculation.grade.unmetRequirements, slots.map((slot, index) => ({ ...slot, mainStat: mainStats[index] ?? "" })), data?.mainStats ?? []) : [];
@@ -89,7 +95,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
 
   if (!data) return <main className="grid min-h-screen place-items-center bg-zinc-950 text-sm text-zinc-400">빌드 데이터를 불러오는 중…</main>;
   const game = data.games[0];
-  const statCards = [["CRIT Rate", calculation?.result.critRate ?? 0], ["CRIT DMG", calculation?.result.critDamage ?? 0], ["Energy Regen", calculation?.result.energyRegen ?? 0], ["Fusion DMG", calculation?.result.fusionDamageBonus ?? 0]] as const;
+  const statCards = [["CRIT Rate", calculation?.result.critRate ?? 0], ["CRIT DMG", calculation?.result.critDamage ?? 0], ["Energy Regen", calculation?.result.energyRegen ?? 0], ["Fusion DMG", calculation?.result.fusionDamageBonus ?? 0], ["Spectro DMG", calculation?.result.spectroDamageBonus ?? 0]] as const;
 
   return <main className="min-h-screen bg-[radial-gradient(circle_at_85%_0%,rgba(124,58,237,.16),transparent_30rem),#09090b] pb-16 text-zinc-100">
     <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
@@ -121,7 +127,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
 
           <section className="rounded-2xl border border-white/10 bg-zinc-900/75 p-5"><h2 className="text-sm font-bold">빌드 저장</h2><input aria-label="빌드 이름" className={inputClass} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} /><div className="mt-3 grid grid-cols-2 gap-2"><button className="rounded-xl bg-violet-500 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50" disabled={saving || !name.trim()} onClick={save}>{saving ? "저장 중…" : profileId ? "수정 저장" : "빌드 저장"}</button><button className="rounded-xl border border-white/12 px-3 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-white/5" onClick={newBuild}>새 빌드</button></div>{message && <p className="mt-3 rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-300" role="status">{message}</p>}</section>
 
-          {profiles.length > 0 && <section className="rounded-2xl border border-white/10 bg-zinc-900/75 p-5"><h2 className="text-sm font-bold">저장한 빌드</h2><label className="mt-3 block text-xs text-zinc-500">현재 결과와 비교<select className={inputClass} value={comparisonProfileId ?? ""} onChange={(event) => setComparisonProfileId(event.target.value || undefined)}><option value="">비교할 빌드 선택</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>{comparisonProfile && calculation && <dl className="mt-3 space-y-1.5">{([['ATK', 'attack'], ['CRIT Rate', 'critRate'], ['CRIT DMG', 'critDamage'], ['Energy Regen', 'energyRegen'], ['Fusion DMG', 'fusionDamageBonus']] as const).map(([label, key]) => { const difference = calculation.result[key] - comparisonProfile.calculatedResult[key]; return <div className="grid grid-cols-[1fr_auto] rounded-lg bg-black/20 px-3 py-2 text-xs" key={key}><dt className="text-zinc-400">{label}</dt><dd className={difference === 0 ? "text-zinc-500" : difference > 0 ? "text-emerald-300" : "text-rose-300"}>{difference > 0 ? "+" : ""}{format(difference)}</dd></div>; })}</dl>}<ul className="mt-4 space-y-1 border-t border-white/8 pt-3">{profiles.map((profile) => <li className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-white/5" key={profile.id}><button className="min-w-0 truncate text-left text-sm font-semibold text-zinc-200" onClick={() => load(profile)}>{profile.name}</button><div className="flex shrink-0 gap-3 text-xs"><button className="text-zinc-400 hover:text-white" onClick={() => duplicate(profile)}>복제</button><button className="text-rose-300 hover:text-rose-200" onClick={() => { if (comparisonProfileId === profile.id) setComparisonProfileId(undefined); void remove(profile.id); }}>삭제</button></div></li>)}</ul></section>}
+          {profiles.length > 0 && <section className="rounded-2xl border border-white/10 bg-zinc-900/75 p-5"><h2 className="text-sm font-bold">저장한 빌드</h2><label className="mt-3 block text-xs text-zinc-500">현재 결과와 비교<select className={inputClass} value={comparisonProfileId ?? ""} onChange={(event) => setComparisonProfileId(event.target.value || undefined)}><option value="">비교할 빌드 선택</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>{comparisonProfile && calculation && <dl className="mt-3 space-y-1.5">{([['ATK', 'attack'], ['CRIT Rate', 'critRate'], ['CRIT DMG', 'critDamage'], ['Energy Regen', 'energyRegen'], ['Fusion DMG', 'fusionDamageBonus'], ['Spectro DMG', 'spectroDamageBonus']] as const).map(([label, key]) => { const difference = calculation.result[key] - (comparisonProfile.calculatedResult[key] ?? 0); return <div className="grid grid-cols-[1fr_auto] rounded-lg bg-black/20 px-3 py-2 text-xs" key={key}><dt className="text-zinc-400">{label}</dt><dd className={difference === 0 ? "text-zinc-500" : difference > 0 ? "text-emerald-300" : "text-rose-300"}>{difference > 0 ? "+" : ""}{format(difference)}</dd></div>; })}</dl>}<ul className="mt-4 space-y-1 border-t border-white/8 pt-3">{profiles.map((profile) => <li className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-white/5" key={profile.id}><button className="min-w-0 truncate text-left text-sm font-semibold text-zinc-200" onClick={() => load(profile)}>{profile.name}</button><div className="flex shrink-0 gap-3 text-xs"><button className="text-zinc-400 hover:text-white" onClick={() => duplicate(profile)}>복제</button><button className="text-rose-300 hover:text-rose-200" onClick={() => { if (comparisonProfileId === profile.id) setComparisonProfileId(undefined); void remove(profile.id); }}>삭제</button></div></li>)}</ul></section>}
         </aside>
       </div>
     </div>

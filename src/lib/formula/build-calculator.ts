@@ -37,6 +37,7 @@ export function calculateBuildStats(
     critDamage: round(stats.critDamage ?? 150),
     energyRegen: round(stats.energyRegen ?? 100),
     fusionDamageBonus: round(stats.fusionDamageBonus ?? 0),
+    spectroDamageBonus: round(stats.spectroDamageBonus ?? 0),
     resonanceSkillDamageBonus: round(stats.resonanceSkillDamageBonus ?? 0),
   };
 }

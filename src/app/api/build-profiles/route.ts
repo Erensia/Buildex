@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
+import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
 import { FORMULA_VERSION } from "@/lib/formula/versions";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import { getBuildProfilesForUser, getBuildReferences, getCurrentUser, validateBuildReferences } from "@/lib/build-profiles";
@@ -38,7 +39,9 @@ export async function POST(request: Request) {
     ...result,
     grade: character.externalKey === "changli"
       ? evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS).grade
-      : null,
+      : character.externalKey === "zani"
+        ? evaluateBuildGrade(result, ZANI_S0_GRADE_REQUIREMENTS).grade
+        : null,
   };
   const [profile] = await getDb().insert(buildProfiles).values({
     userId: user.id,

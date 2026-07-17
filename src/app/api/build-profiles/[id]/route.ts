@@ -7,6 +7,7 @@ import { buildInputSchema } from "@/lib/validation/build";
 import { getBuildReferences } from "@/lib/build-profiles";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
 import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
+import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import { getEchoStatSources } from "@/lib/build-calculation";
 
@@ -45,7 +46,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     ...result,
     grade: character.externalKey === "changli"
       ? evaluateBuildGrade(result, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS).grade
-      : null,
+      : character.externalKey === "zani"
+        ? evaluateBuildGrade(result, ZANI_S0_GRADE_REQUIREMENTS).grade
+        : null,
   };
   const [updated] = await getDb().update(buildProfiles).set({
     characterId: character.id,

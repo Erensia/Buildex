@@ -8,6 +8,7 @@ export type StatKey =
   | "critDamage"
   | "energyRegen"
   | "fusionDamageBonus"
+  | "spectroDamageBonus"
   | "resonanceSkillDamageBonus";
 
 export type StatValues = Partial<Record<StatKey, number>>;
@@ -35,6 +36,7 @@ export interface CalculatedStats {
   critDamage: number;
   energyRegen: number;
   fusionDamageBonus: number;
+  spectroDamageBonus: number;
   resonanceSkillDamageBonus: number;
 }
 

@@ -16,4 +16,18 @@ describe("resolveEchoSetEffects", () => {
     expect(inactive.conditionalBuffs).toHaveLength(1);
     expect(active.automaticSources).toHaveLength(1);
   });
+
+  it("applies Spectro set bonuses using the same data-driven path", () => {
+    const celestialLight = {
+      externalKey: "celestial-light",
+      name: "Celestial Light",
+      effects: { twoPiece: { spectroDamageBonus: 10 } },
+    };
+
+    const result = resolveEchoSetEffects(["celestial-light", "celestial-light"], [celestialLight]);
+
+    expect(result.automaticSources).toEqual([
+      { id: "set:celestial-light:two-piece", label: "Celestial Light 2-piece", stats: { spectroDamageBonus: 10 } },
+    ]);
+  });
 });

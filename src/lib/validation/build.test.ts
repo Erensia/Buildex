@@ -26,6 +26,14 @@ describe("buildInputSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts Spectro DMG Bonus as an echo substat", () => {
+    const result = buildInputSchema.safeParse({
+      name: "Spectro build", characterKey: "zani", weaponKey: "weapon", formulaVersion: "ww-3.5.0",
+      echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "spectroDamageBonus", value: 10 }] : [] })),
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects missing echo selections and invalid slot costs", () => {
     const result = buildInputSchema.safeParse({
       name: "Test",
