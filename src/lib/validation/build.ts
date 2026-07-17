@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isValidEchoSubstatRoll } from "@/lib/formula/echo-substats";
 
-const subStatKeys = ["flatAttack", "attackPercent", "flatHealth", "healthPercent", "flatDefense", "defensePercent", "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus", "glacioDamageBonus"] as const;
+const subStatKeys = ["flatAttack", "attackPercent", "flatHealth", "healthPercent", "flatDefense", "defensePercent", "critRate", "critDamage", "energyRegen", "normalAttackDamageBonus", "heavyAttackDamageBonus", "resonanceSkillDamageBonus", "resonanceLiberationDamageBonus"] as const;
 
 export const echoSchema = z.object({
   slot: z.number().int().min(1).max(5),
