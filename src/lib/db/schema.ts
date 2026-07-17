@@ -30,13 +30,27 @@ export const games = pgTable("games", {
   currentDataVersion: varchar("current_data_version", { length: 32 }),
   sourceSnapshot: varchar("source_snapshot", { length: 10 }),
   sourceUrl: text("source_url"),
+  currentDataReleaseId: uuid("current_data_release_id"),
   isActive: boolean("is_active").default(true).notNull(),
   ...timestamps,
 });
 
+export const gameDataReleases = pgTable("game_data_releases", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  version: varchar("version", { length: 32 }).notNull(),
+  status: varchar("status", { length: 20 }).default("draft").notNull(),
+  sourceSnapshot: varchar("source_snapshot", { length: 10 }).notNull(),
+  sourceManifest: jsonb("source_manifest").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+}, (table) => [uniqueIndex("game_data_release_game_version_idx").on(table.gameId, table.version)]);
+
 export const characters = pgTable("characters", {
   id: uuid("id").defaultRandom().primaryKey(),
   gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  releaseId: uuid("release_id").notNull().references(() => gameDataReleases.id, { onDelete: "restrict" }),
   externalKey: varchar("external_key", { length: 80 }).notNull(),
   name: varchar("name", { length: 80 }).notNull(),
   role: varchar("role", { length: 40 }).notNull(),
@@ -45,11 +59,12 @@ export const characters = pgTable("characters", {
   sourceUrl: text("source_url").notNull(),
   baseStats: jsonb("base_stats").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [uniqueIndex("character_game_key_idx").on(table.gameId, table.externalKey)]);
+}, (table) => [uniqueIndex("character_release_key_idx").on(table.releaseId, table.externalKey)]);
 
 export const weapons = pgTable("weapons", {
   id: uuid("id").defaultRandom().primaryKey(),
   gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  releaseId: uuid("release_id").notNull().references(() => gameDataReleases.id, { onDelete: "restrict" }),
   externalKey: varchar("external_key", { length: 80 }).notNull(),
   name: varchar("name", { length: 80 }).notNull(),
   weaponType: varchar("weapon_type", { length: 40 }).notNull(),
@@ -58,11 +73,12 @@ export const weapons = pgTable("weapons", {
   sourceUrl: text("source_url").notNull(),
   stats: jsonb("stats").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [uniqueIndex("weapon_game_key_idx").on(table.gameId, table.externalKey)]);
+}, (table) => [uniqueIndex("weapon_release_key_idx").on(table.releaseId, table.externalKey)]);
 
 export const echoes = pgTable("echoes", {
   id: uuid("id").defaultRandom().primaryKey(),
   gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  releaseId: uuid("release_id").notNull().references(() => gameDataReleases.id, { onDelete: "restrict" }),
   externalKey: varchar("external_key", { length: 80 }).notNull(),
   name: varchar("name", { length: 80 }).notNull(),
   cost: integer("cost").notNull(),
@@ -71,11 +87,12 @@ export const echoes = pgTable("echoes", {
   sourceUrl: text("source_url").notNull(),
   stats: jsonb("stats").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [uniqueIndex("echo_game_key_idx").on(table.gameId, table.externalKey)]);
+}, (table) => [uniqueIndex("echo_release_key_idx").on(table.releaseId, table.externalKey)]);
 
 export const echoSets = pgTable("echo_sets", {
   id: uuid("id").defaultRandom().primaryKey(),
   gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  releaseId: uuid("release_id").notNull().references(() => gameDataReleases.id, { onDelete: "restrict" }),
   externalKey: varchar("external_key", { length: 80 }).notNull(),
   name: varchar("name", { length: 80 }).notNull(),
   dataVersion: varchar("data_version", { length: 32 }),
@@ -83,7 +100,7 @@ export const echoSets = pgTable("echo_sets", {
   sourceUrl: text("source_url").notNull(),
   effects: jsonb("effects").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [uniqueIndex("echo_set_game_key_idx").on(table.gameId, table.externalKey)]);
+}, (table) => [uniqueIndex("echo_set_release_key_idx").on(table.releaseId, table.externalKey)]);
 
 export const echoSetEchoes = pgTable("echo_set_echoes", {
   echoSetId: uuid("echo_set_id").notNull().references(() => echoSets.id, { onDelete: "cascade" }),
@@ -93,13 +110,14 @@ export const echoSetEchoes = pgTable("echo_set_echoes", {
 export const echoMainStats = pgTable("echo_main_stats", {
   id: uuid("id").defaultRandom().primaryKey(),
   gameId: uuid("game_id").notNull().references(() => games.id, { onDelete: "cascade" }),
+  releaseId: uuid("release_id").notNull().references(() => gameDataReleases.id, { onDelete: "restrict" }),
   cost: integer("cost").notNull(),
   statKey: varchar("stat_key", { length: 80 }).notNull(),
   value: integer("value").notNull(),
   dataVersion: varchar("data_version", { length: 32 }),
   sourceSnapshot: varchar("source_snapshot", { length: 10 }).notNull(),
   sourceUrl: text("source_url").notNull(),
-}, (table) => [uniqueIndex("echo_main_stat_game_cost_key_idx").on(table.gameId, table.cost, table.statKey)]);
+}, (table) => [uniqueIndex("echo_main_stat_release_cost_key_idx").on(table.releaseId, table.cost, table.statKey)]);
 
 export const buildProfiles = pgTable("build_profiles", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -110,6 +128,7 @@ export const buildProfiles = pgTable("build_profiles", {
   buildInput: jsonb("build_input").notNull(),
   calculatedResult: jsonb("calculated_result").notNull(),
   dataVersion: varchar("data_version", { length: 32 }).notNull(),
+  dataReleaseId: uuid("data_release_id").references(() => gameDataReleases.id, { onDelete: "restrict" }),
   formulaVersion: varchar("formula_version", { length: 32 }).notNull(),
   ...timestamps,
 });

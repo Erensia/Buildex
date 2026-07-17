@@ -2,7 +2,8 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
-import { buildProfiles, characters, echoes, echoSetEchoes, echoSets, users, weapons } from "@/lib/db/schema";
+import { buildProfiles, characters, echoes, echoSetEchoes, echoSets, echoMainStats, users, weapons } from "@/lib/db/schema";
+import { getCurrentPublishedRelease } from "@/lib/game-data-releases";
 import type { BuildInput } from "@/lib/validation/build";
 
 export async function getCurrentUser() {
@@ -33,15 +34,18 @@ export async function getBuildProfilesForUser(userId: string) {
 
 export async function getBuildReferences(characterKey: string, weaponKey: string, setKeys: string[] = [], echoKeys: string[] = []) {
   const db = getDb();
-  const character = await db.query.characters.findFirst({ where: eq(characters.externalKey, characterKey) });
-  const weapon = await db.query.weapons.findFirst({ where: eq(weapons.externalKey, weaponKey) });
-  const sets = setKeys.length ? await db.query.echoSets.findMany({ where: inArray(echoSets.externalKey, setKeys) }) : [];
-  const selectedEchoes = echoKeys.length ? await db.query.echoes.findMany({ where: inArray(echoes.externalKey, echoKeys) }) : [];
+  const current = await getCurrentPublishedRelease();
+  if (!current) return { release: null, character: undefined, weapon: undefined, sets: [], selectedEchoes: [], memberships: [], mainStats: [] };
+  const releaseId = current.release.id;
+  const character = await db.query.characters.findFirst({ where: and(eq(characters.releaseId, releaseId), eq(characters.externalKey, characterKey)) });
+  const weapon = await db.query.weapons.findFirst({ where: and(eq(weapons.releaseId, releaseId), eq(weapons.externalKey, weaponKey)) });
+  const sets = setKeys.length ? await db.query.echoSets.findMany({ where: and(eq(echoSets.releaseId, releaseId), inArray(echoSets.externalKey, setKeys)) }) : [];
+  const selectedEchoes = echoKeys.length ? await db.query.echoes.findMany({ where: and(eq(echoes.releaseId, releaseId), inArray(echoes.externalKey, echoKeys)) }) : [];
   const memberships = selectedEchoes.length && sets.length
     ? await db.select().from(echoSetEchoes).where(and(inArray(echoSetEchoes.echoId, selectedEchoes.map((echo) => echo.id)), inArray(echoSetEchoes.echoSetId, sets.map((set) => set.id))))
     : [];
-  const mainStats = await db.query.echoMainStats.findMany();
-  return { character, weapon, sets, selectedEchoes, memberships, mainStats };
+  const mainStats = await db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, releaseId) });
+  return { release: current.release, character, weapon, sets, selectedEchoes, memberships, mainStats };
 }
 
 export function validateBuildReferences(input: BuildInput, references: Awaited<ReturnType<typeof getBuildReferences>>) {

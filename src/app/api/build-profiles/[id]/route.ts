@@ -34,8 +34,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey));
   const referenceError = validateBuildReferences(parsed.data, references);
   if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
-  const { character, weapon, sets } = references;
-  if (!character || !weapon) return NextResponse.json({ error: "Selected character or weapon was not found." }, { status: 400 });
+  const { character, weapon, sets, release } = references;
+  if (!character || !weapon || !release) return NextResponse.json({ error: "Selected character or weapon was not found." }, { status: 400 });
   const setEffects = resolveEchoSetEffects(parsed.data.echoes.map((echo) => echo.setKey), sets.map((set) => ({ externalKey: set.externalKey, name: set.name, effects: set.effects as Record<string, unknown> })));
   const result = calculateBuildStats({
     character: { id: character.externalKey, label: character.name, stats: character.baseStats as { baseAttack?: number; critRate?: number } },
@@ -59,7 +59,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     name: parsed.data.name,
     buildInput: parsed.data,
     calculatedResult,
-    dataVersion: character.dataVersion ?? "3.5",
+    dataVersion: release.version,
+    dataReleaseId: release.id,
     formulaVersion: parsed.data.formulaVersion,
     updatedAt: new Date(),
   }).where(eq(buildProfiles.id, profile.id)).returning();

@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/build-profiles";
 import { getDb } from "@/lib/db/client";
-import { echoSetEchoes } from "@/lib/db/schema";
+import { echoSetEchoes, echoMainStats, echoes as echoesTable, echoSets as echoSetsTable, characters as charactersTable, weapons as weaponsTable } from "@/lib/db/schema";
+import { getCurrentPublishedRelease } from "@/lib/game-data-releases";
+import { eq, inArray } from "drizzle-orm";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
 
   const db = getDb();
+  const current = await getCurrentPublishedRelease();
+  if (!current) return NextResponse.json({ error: "공개된 게임 데이터가 없습니다." }, { status: 503 });
+  const releaseId = current.release.id;
   const [games, characters, weapons, echoes, echoSets, mainStats, echoSetMemberships] = await Promise.all([
-    db.query.games.findMany({ columns: { name: true, currentDataVersion: true, sourceSnapshot: true, sourceUrl: true } }),
-    db.query.characters.findMany(),
-    db.query.weapons.findMany(),
-    db.query.echoes.findMany(),
-    db.query.echoSets.findMany(),
-    db.query.echoMainStats.findMany(),
-    db.select().from(echoSetEchoes),
+    Promise.resolve([{ name: current.game.name, currentDataVersion: current.release.version, sourceSnapshot: current.release.sourceSnapshot, sourceUrl: current.game.sourceUrl, releaseId }]),
+    db.query.characters.findMany({ where: eq(charactersTable.releaseId, releaseId) }),
+    db.query.weapons.findMany({ where: eq(weaponsTable.releaseId, releaseId) }),
+    db.query.echoes.findMany({ where: eq(echoesTable.releaseId, releaseId) }),
+    db.query.echoSets.findMany({ where: eq(echoSetsTable.releaseId, releaseId) }),
+    db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, releaseId) }),
+    db.select().from(echoSetEchoes).where(inArray(echoSetEchoes.echoSetId, (await db.query.echoSets.findMany({ where: eq(echoSetsTable.releaseId, releaseId), columns: { id: true } })).map((set) => set.id))),
   ]);
 
   return NextResponse.json({ games, characters, weapons, echoes, echoSets, mainStats, echoSetMemberships });

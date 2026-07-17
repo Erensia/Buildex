@@ -26,8 +26,8 @@ export async function POST(request: Request) {
   const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey));
   const referenceError = validateBuildReferences(parsed.data, references);
   if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
-  const { character, weapon, sets } = references;
-  if (!character || !weapon) return NextResponse.json({ error: "지원하지 않는 캐릭터 또는 무기입니다." }, { status: 400 });
+  const { character, weapon, sets, release } = references;
+  if (!character || !weapon || !release) return NextResponse.json({ error: "지원하지 않는 캐릭터 또는 무기입니다." }, { status: 400 });
 
   const setEffects = resolveEchoSetEffects(parsed.data.echoes.map((echo) => echo.setKey), sets.map((set) => ({ externalKey: set.externalKey, name: set.name, effects: set.effects as Record<string, unknown> })));
   const result = calculateBuildStats({
@@ -53,7 +53,8 @@ export async function POST(request: Request) {
     name: parsed.data.name,
     buildInput: parsed.data,
     calculatedResult,
-    dataVersion: character.dataVersion ?? "3.5",
+    dataVersion: release.version,
+    dataReleaseId: release.id,
     formulaVersion: FORMULA_VERSION,
   }).returning();
 

@@ -3,6 +3,7 @@ import { gameDataSchema } from "./game-data";
 
 const character = {
   entity: "character" as const,
+  releaseId: "70000000-0000-4000-8000-000000000001",
   gameSlug: "wuthering-waves",
   externalKey: "example-character",
   name: "예시 캐릭터",

@@ -26,12 +26,18 @@ describe("buildInputSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("accepts Spectro DMG Bonus as an echo substat", () => {
+  it("accepts Resonance Liberation DMG Bonus as an echo substat", () => {
     const result = buildInputSchema.safeParse({
-      name: "Spectro build", characterKey: "zani", weaponKey: "weapon", formulaVersion: "ww-3.5.0",
-      echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "spectroDamageBonus", value: 10.1 }] : [] })),
+      name: "Liberation build", characterKey: "zani", weaponKey: "weapon", formulaVersion: "ww-3.5.0",
+      echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "resonanceLiberationDamageBonus", value: 10.1 }] : [] })),
     });
     expect(result.success).toBe(true);
+  });
+
+  it("uses the shared damage roll range for attack and HP percentages", () => {
+    const input = { name: "Roll test", characterKey: "changli", weaponKey: "weapon", formulaVersion: "ww-3.5.0", echoes: [1, 2, 3, 4, 5].map((slot) => ({ ...echo, slot, echoKey: `echo-${slot}`, cost: slot === 1 ? 4 : slot < 4 ? 3 : 1, subStats: slot === 1 ? [{ key: "attackPercent", value: 6.4 }, { key: "healthPercent", value: 11.6 }] : [] })) };
+    expect(buildInputSchema.safeParse(input).success).toBe(true);
+    expect(buildInputSchema.safeParse({ ...input, echoes: input.echoes.map((item) => item.slot === 1 ? { ...item, subStats: [{ key: "attackPercent", value: 8.1 }] } : item) }).success).toBe(false);
   });
 
   it("rejects missing echo selections and invalid slot costs", () => {
