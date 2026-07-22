@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin";
 import { getDb } from "@/lib/db/client";
@@ -45,6 +45,12 @@ export async function POST(request: Request) {
   if (!game) return NextResponse.json({ error: "먼저 해당 게임을 등록해 주세요." }, { status: 400 });
   const release = await db.query.gameDataReleases.findFirst({ where: and(eq(gameDataReleases.id, input.releaseId), eq(gameDataReleases.gameId, game.id)) });
   if (!release || release.status !== "draft") return NextResponse.json({ error: "수정 가능한 초안 릴리스를 선택해 주세요." }, { status: 400 });
+  const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
+  if (input.entity === "partyBundle" && dryRun) {
+    const existing = await db.query.characters.findMany({ where: and(eq(characters.releaseId, release.id), inArray(characters.externalKey, input.members.map((member) => member.externalKey))), columns: { externalKey: true } });
+    const existingKeys = new Set(existing.map((character) => character.externalKey));
+    return NextResponse.json({ preview: { partyName: input.partyName, focusElement: input.focusElement, add: input.members.filter((member) => !existingKeys.has(member.externalKey)).map((member) => member.name), update: input.members.filter((member) => existingKeys.has(member.externalKey)).map((member) => member.name) } });
+  }
   try {
     await upsertGameData(input, game.id, release.id);
   } catch (error) {
@@ -70,6 +76,14 @@ async function upsertGameData(input: Exclude<GameDataInput, { entity: "game" }>,
   } else if (input.entity === "mainStat") {
     await db.insert(echoMainStats).values({ gameId, releaseId, cost: input.cost, statKey: input.statKey, value: input.value, dataVersion: input.dataVersion, sourceSnapshot: input.sourceSnapshot, sourceUrl: input.sourceUrl })
       .onConflictDoUpdate({ target: [echoMainStats.releaseId, echoMainStats.cost, echoMainStats.statKey], set: { value: input.value, dataVersion: input.dataVersion, sourceSnapshot: input.sourceSnapshot, sourceUrl: input.sourceUrl } });
+  } else if (input.entity === "partyBundle") {
+    for (const member of input.members) {
+      const weaponType = member.baseStats.weaponType;
+      const baseAttack = member.baseStats.baseAttack;
+      if (typeof weaponType !== "string" || typeof baseAttack !== "number" || !Number.isFinite(baseAttack) || baseAttack < 0) throw new Error("파티 캐릭터마다 유효한 weaponType과 baseAttack이 필요합니다.");
+      await db.insert(characters).values({ gameId, releaseId, externalKey: member.externalKey, name: member.name, role: member.role, baseStats: member.baseStats, dataVersion: input.dataVersion, sourceSnapshot: input.sourceSnapshot, sourceUrl: member.sourceUrl })
+        .onConflictDoUpdate({ target: [characters.releaseId, characters.externalKey], set: { name: member.name, role: member.role, baseStats: member.baseStats, dataVersion: input.dataVersion, sourceSnapshot: input.sourceSnapshot, sourceUrl: member.sourceUrl } });
+    }
   } else {
     const [echoSet, echo] = await Promise.all([
       db.query.echoSets.findFirst({ where: and(eq(echoSets.releaseId, releaseId), eq(echoSets.externalKey, input.echoSetKey)) }),

@@ -3,7 +3,7 @@ import type { ConditionalBuff, StatSource, StatValues } from "./stats";
 type EffectRecord = Record<string, unknown>;
 export type EchoSetDefinition = { externalKey: string; name: string; effects: EffectRecord };
 
-const statKeys = new Set<keyof StatValues>(["attackPercent", "energyRegen", "critRate", "fusionDamageBonus", "spectroDamageBonus", "glacioDamageBonus", "resonanceSkillDamageBonus"]);
+const statKeys = new Set<keyof StatValues>(["attackPercent", "energyRegen", "critRate", "fusionDamageBonus", "spectroDamageBonus", "glacioDamageBonus", "electroDamageBonus", "aeroDamageBonus", "havocDamageBonus", "resonanceSkillDamageBonus"]);
 
 function toStats(effect: EffectRecord): StatValues {
   const stats: StatValues = {};

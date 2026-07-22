@@ -6,14 +6,14 @@ import { calculateBuildStats, evaluateBuildGrade } from "./build-calculator";
 const baselineBuild = {
   character: { id: "changli", label: "장리", stats: { baseAttack: 1000 } },
   weapon: { id: "blazing-brilliance", label: "솟아오르는 화염", stats: { baseAttack: 500, critRate: 24.3 } },
-  echoes: [{ id: "echoes", label: "에코", stats: { attackPercent: 60, flatAttack: 200, critRate: 50, critDamage: 120, energyRegen: 30, fusionDamageBonus: 60, spectroDamageBonus: 60 } }],
+  echoes: [{ id: "echoes", label: "에코", stats: { attackPercent: 60, flatAttack: 200, critRate: 50, critDamage: 120, energyRegen: 30, fusionDamageBonus: 60, spectroDamageBonus: 60, electroDamageBonus: 30, aeroDamageBonus: 30, havocDamageBonus: 30 } }],
 };
 
 describe("calculateBuildStats", () => {
   it("applies percentage attack to the combined character and weapon base attack", () => {
     const result = calculateBuildStats(baselineBuild);
 
-    expect(result).toMatchObject({ attack: 2600, critRate: 79.3, critDamage: 270, energyRegen: 130, fusionDamageBonus: 60, spectroDamageBonus: 60 });
+    expect(result).toMatchObject({ attack: 2600, critRate: 79.3, critDamage: 270, energyRegen: 130, fusionDamageBonus: 60, spectroDamageBonus: 60, electroDamageBonus: 30, aeroDamageBonus: 30, havocDamageBonus: 30 });
   });
 
   it("adds the universal starting stats when Echo substats are present", () => {

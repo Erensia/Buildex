@@ -1,5 +1,5 @@
 import type { BuildInput } from "@/lib/validation/build";
-import type { StatSource, StatValues } from "@/lib/formula/stats";
+import { addStats, type StatSource, type StatValues } from "@/lib/formula/stats";
 
 type MainStat = { cost: number; statKey: string; value: number };
 
@@ -10,10 +10,10 @@ export function getEchoStatSources(input: BuildInput, mainStats: MainStat[]): St
     return {
       id: `echo-${echo.slot}`,
       label: `에코 ${echo.slot}`,
-      stats: {
-        ...(mainStat ? { [mainStat.statKey]: mainStat.value } : {}),
-        ...Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])),
-      } as StatValues,
+      stats: addStats(
+        mainStat ? { [mainStat.statKey]: mainStat.value } as StatValues : {},
+        Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) as StatValues,
+      ),
     };
   });
 }
