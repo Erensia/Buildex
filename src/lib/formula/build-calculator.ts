@@ -44,6 +44,9 @@ export function calculateBuildStats(
 
   return {
     attack: round(baseAttack * (1 + (stats.attackPercent ?? 0) / 100) + (stats.flatAttack ?? 0)),
+    critRate: round(5 + (stats.critRate ?? 0)),
+    critDamage: round(150 + (stats.critDamage ?? 0)),
+    energyRegen: round(100 + (stats.energyRegen ?? 0)),
     critRate: round(STANDARD_BASE_STATS.critRate + (stats.critRate ?? 0)),
     critDamage: round(STANDARD_BASE_STATS.critDamage + (stats.critDamage ?? 0)),
     energyRegen: round(STANDARD_BASE_STATS.energyRegen + (stats.energyRegen ?? 0)),

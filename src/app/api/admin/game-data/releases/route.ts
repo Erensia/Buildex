@@ -25,12 +25,25 @@ async function validateRelease(releaseId: string) {
   if (!characterRows.length) errors.push("캐릭터가 한 명 이상 필요합니다.");
   if (!weaponRows.length) errors.push("무기가 한 개 이상 필요합니다.");
   if (!echoRows.length || !setRows.length || !mainStatRows.length) errors.push("에코·에코 세트·주옵션 데이터를 모두 등록해야 합니다.");
+  if (!Array.isArray(release.sourceManifest) || !release.sourceManifest.length) errors.push("릴리스 출처가 한 개 이상 필요합니다.");
+  const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);
   if (partyBuffRows.some((buff) => !characterRows.some((character) => character.externalKey === buff.targetCharacterKey) || !characterRows.some((character) => character.externalKey === buff.providerCharacterKey))) errors.push("파티 버프의 대상 또는 제공 캐릭터가 이 릴리스에 없습니다.");
   if (partyBuffRows.some((buff) => !buff.stats || typeof buff.stats !== "object" || Array.isArray(buff.stats) || !Object.values(buff.stats as Record<string, unknown>).every((value) => typeof value === "number" && Number.isFinite(value)))) errors.push("파티 버프의 스탯 값은 유한한 숫자 객체여야 합니다.");
   const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion && row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);
   if (mismatched) errors.push("모든 데이터 행의 버전과 검증일은 릴리스 정보와 일치해야 합니다.");
   const memberships = setRows.length && echoRows.length ? await db.select().from(echoSetEchoes).where(and(inArray(echoSetEchoes.echoSetId, setRows.map((row) => row.id)), inArray(echoSetEchoes.echoId, echoRows.map((row) => row.id)))) : [];
   if (!memberships.length) errors.push("에코 세트 구성 데이터가 필요합니다.");
+  const linkedEchoIds = new Set(memberships.map((membership) => membership.echoId));
+  const linkedSetIds = new Set(memberships.map((membership) => membership.echoSetId));
+  if (echoRows.some((echo) => !linkedEchoIds.has(echo.id))) errors.push("모든 에코는 같은 릴리스의 에코 세트에 하나 이상 소속되어야 합니다.");
+  if (setRows.some((set) => !linkedSetIds.has(set.id))) errors.push("모든 에코 세트에는 하나 이상의 에코 구성이 필요합니다.");
+  const requiredCosts = [1, 3, 4];
+  if (requiredCosts.some((cost) => !mainStatRows.some((stat) => stat.cost === cost))) errors.push("1·3·4 코스트별 에코 주옵션이 하나 이상 필요합니다.");
+  const weaponTypes = new Set(weaponRows.map((weapon) => weapon.weaponType));
+  if (characterRows.some((character) => {
+    const weaponType = (character.baseStats as { weaponType?: unknown }).weaponType;
+    return typeof weaponType === "string" && !weaponTypes.has(weaponType);
+  })) errors.push("모든 캐릭터 무기 타입에 맞는 무기가 하나 이상 필요합니다.");
   return { errors, release };
 }
 

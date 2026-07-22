@@ -33,6 +33,16 @@ describe("calculateBuildStats", () => {
     expect(withoutBuff.fusionDamageBonus).toBe(60);
     expect(withBuff).toMatchObject({ fusionDamageBonus: 95, resonanceSkillDamageBonus: 25 });
   });
+
+  it("adds Echo substats to the global critical and energy defaults", () => {
+    const result = calculateBuildStats({
+      character: { id: "character", label: "Character", stats: { baseAttack: 100 } },
+      weapon: { id: "weapon", label: "Weapon", stats: {} },
+      echoes: [{ id: "echo", label: "Echo", stats: { critRate: 22, critDamage: 48.6, energyRegen: 12.4 } }],
+    });
+
+    expect(result).toMatchObject({ critRate: 27, critDamage: 198.6, energyRegen: 112.4 });
+  });
 });
 
 describe("evaluateBuildGrade", () => {

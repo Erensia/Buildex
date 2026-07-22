@@ -14,6 +14,14 @@ export async function GET(request: Request) {
   const current = await getPublicRelease(releaseIdParam);
   if (!current) return NextResponse.json({ error: "공개된 게임 데이터가 없습니다." }, { status: 503 });
   const releaseId = current.release.id;
+  const [games, characters, weapons, echoes, echoSets, mainStats, echoSetMemberships] = await Promise.all([
+    Promise.resolve([{
+      name: current.game.name,
+      currentDataVersion: current.release.version,
+      sourceSnapshot: current.release.sourceSnapshot,
+      sourceManifest: current.release.sourceManifest,
+      releaseId,
+    }]),
   const [games, characters, weapons, echoes, echoSets, mainStats, partyBuffDefinitions, echoSetMemberships] = await Promise.all([
     Promise.resolve([{ name: current.game.name, currentDataVersion: current.release.version, sourceSnapshot: current.release.sourceSnapshot, sourceUrl: current.game.sourceUrl, releaseId }]),
     db.query.characters.findMany({ where: eq(charactersTable.releaseId, releaseId) }),
