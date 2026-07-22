@@ -26,7 +26,7 @@ type SavedProfile = { id: string; name: string; dataReleaseId: string | null; da
 const slots: { slot: number; cost: 1 | 3 | 4 }[] = [{ slot: 1, cost: 4 }, { slot: 2, cost: 3 }, { slot: 3, cost: 3 }, { slot: 4, cost: 1 }, { slot: 5, cost: 1 }];
 const statLabels: Record<StatKey, string> = { baseAttack: "기초 공격력", flatAttack: "공격력", attackPercent: "공격력 %", flatHealth: "HP", healthPercent: "HP %", flatDefense: "방어력", defensePercent: "방어력 %", critRate: "치명타 확률", critDamage: "치명타 피해", energyRegen: "공명 효율", fusionDamageBonus: "용융 피해 보너스", spectroDamageBonus: "회절 피해 보너스", glacioDamageBonus: "응결 피해 보너스", basicAttackDamageBonus: "일반 공격 피해 보너스", heavyAttackDamageBonus: "강공격 피해 보너스", resonanceSkillDamageBonus: "공명 스킬 피해 보너스", resonanceLiberationDamageBonus: "공명 해방 피해 보너스" };
 const trackedStats = Object.keys(echoSubstatRolls) as (keyof typeof echoSubstatRolls)[];
-const inputClass = "mt-2 w-full rounded-xl border border-white/10 bg-gradient-to-b from-zinc-950 to-zinc-900 px-3 py-2.5 text-sm text-zinc-100 shadow-inner shadow-black/30 outline-none transition placeholder:text-zinc-600 hover:border-white/20 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/15";
+const inputClass = "mt-2 w-full rounded-xl border border-transparent bg-[#20252f] px-3 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/15";
 
 function format(value: number) { return Number.isInteger(value) ? String(value) : value.toFixed(1); }
 const percentStats = new Set<string>(["attackPercent", "healthPercent", "defensePercent", "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus", "glacioDamageBonus", "basicAttackDamageBonus", "heavyAttackDamageBonus", "resonanceSkillDamageBonus", "resonanceLiberationDamageBonus"]);
@@ -113,7 +113,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
   const game = data.games[0];
   const statCards = [["CRIT Rate", calculation?.result.critRate ?? 0], ["CRIT DMG", calculation?.result.critDamage ?? 0], ["Energy Regen", calculation?.result.energyRegen ?? 0], ["Fusion DMG", calculation?.result.fusionDamageBonus ?? 0], ["Spectro DMG", calculation?.result.spectroDamageBonus ?? 0], ["Glacio DMG", calculation?.result.glacioDamageBonus ?? 0]] as const;
 
-  return <main className="build-planner min-h-screen bg-[radial-gradient(circle_at_12%_8%,rgba(76,29,149,.26),transparent_29rem),radial-gradient(circle_at_88%_0%,rgba(124,58,237,.22),transparent_34rem),linear-gradient(135deg,#09090b_0%,#11111c_48%,#09090b_100%)] bg-fixed pb-16 text-zinc-100">
+  return <main className="build-planner min-h-screen bg-[#252b36] pb-16 text-zinc-100">
     <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
       <Link className="text-lg font-black tracking-tight text-white" href="/">BUILDEX<span className="text-violet-400">.</span></Link>
       <div className="flex items-center gap-3 text-sm"><span className="hidden text-zinc-400 sm:block">{userName}</span><button className="rounded-lg border border-white/10 px-3 py-1.5 text-zinc-300 transition hover:border-white/25 hover:text-white" onClick={() => signOut({ callbackUrl: "/" })}>로그아웃</button></div>

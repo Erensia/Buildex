@@ -38,7 +38,7 @@ export function AuthForm({ mode, callbackUrl }: AuthFormProps) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-950 p-6 text-zinc-100">
+    <main className="neumorphic-auth flex min-h-screen items-center justify-center bg-[#252b36] p-6 text-zinc-100">
       <section className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
         <Link className="text-sm font-black tracking-widest text-violet-400" href="/">BUILDEX</Link>
         <h1 className="mt-7 text-3xl font-black">{isSignup ? "빌드 기록을 시작하세요" : "다시 만나서 반가워요"}</h1>

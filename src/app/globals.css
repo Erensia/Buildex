@@ -13,27 +13,163 @@
 }
 
 body {
-  background: var(--background);
+  background: #252b36;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* The build workspace needs a clearer depth hierarchy than the global dark theme. */
+:is(.neumorphic-app, .neumorphic-auth, .neumorphic-admin, .build-planner) {
+  --surface: #252b36;
+  --surface-raised: #2a303c;
+  --surface-pressed: #20252f;
+  --highlight: rgb(255 255 255 / 0.07);
+}
+
+/* Shared raised, pressed, and action states for the non-planner views. */
+.neumorphic-app header,
+.neumorphic-app aside,
+.neumorphic-auth > section,
+.neumorphic-admin > div > section,
+.neumorphic-admin > div > div.grid > section {
+  border-color: transparent;
+  background: var(--surface-raised);
+  box-shadow: 10px 10px 24px rgb(13 16 22 / 0.42), -7px -7px 18px var(--highlight);
+}
+
+.neumorphic-app header {
+  border-bottom: 1px solid rgb(255 255 255 / 0.05);
+}
+
+.neumorphic-app aside li,
+.neumorphic-admin article {
+  border-color: transparent;
+  background: var(--surface-pressed);
+  box-shadow: inset 4px 4px 9px rgb(12 15 20 / 0.48), inset -3px -3px 8px var(--highlight);
+}
+
+.neumorphic-auth input,
+.neumorphic-admin select,
+.neumorphic-admin textarea {
+  border-color: transparent;
+  background: var(--surface-pressed);
+  box-shadow: inset 4px 4px 9px rgb(12 15 20 / 0.48), inset -3px -3px 8px var(--highlight);
+}
+
+.neumorphic-auth input:focus,
+.neumorphic-admin select:focus,
+.neumorphic-admin textarea:focus {
+  border-color: rgb(167 139 250 / 0.52);
+  box-shadow: inset 4px 4px 9px rgb(12 15 20 / 0.48), inset -3px -3px 8px var(--highlight), 0 0 0 3px rgb(139 92 246 / 0.16);
+  outline: none;
+}
+
+.neumorphic-app a.rounded-full,
+.neumorphic-app a.rounded-xl.bg-violet-500,
+.neumorphic-auth button,
+.neumorphic-admin button.bg-violet-500 {
+  background: linear-gradient(145deg, #8b6df0, #6d4ed1);
+  box-shadow: 5px 5px 12px rgb(13 16 22 / 0.42), -3px -3px 8px rgb(255 255 255 / 0.07);
+}
+
+.neumorphic-app a.rounded-full {
+  color: #fff;
+}
+
+.neumorphic-app main > section > div > span {
+  border-color: transparent;
+  background: var(--surface-raised);
+  box-shadow: 5px 5px 12px rgb(13 16 22 / 0.35), -3px -3px 8px var(--highlight);
+}
+
+.neumorphic-app a.rounded-xl.border,
+.neumorphic-admin a.rounded-lg.border,
+.neumorphic-admin button.border {
+  border-color: transparent;
+  background: var(--surface-raised);
+  box-shadow: 5px 5px 12px rgb(13 16 22 / 0.35), -3px -3px 8px var(--highlight);
+}
+
+.neumorphic-app a.rounded-xl.bg-violet-500:hover,
+.neumorphic-auth button:hover,
+.neumorphic-admin button.bg-violet-500:hover {
+  background: linear-gradient(145deg, #9b7eff, #7658dd);
+}
+
+.neumorphic-app a.rounded-xl:active,
+.neumorphic-auth button:active,
+.neumorphic-admin button:active {
+  box-shadow: inset 3px 3px 7px rgb(12 15 20 / 0.34), inset -2px -2px 5px var(--highlight);
+  transform: translateY(1px);
+}
+
+/* Build planner: a restrained dark neumorphic surface system. */
+.build-planner {
+  --surface: #252b36;
+  --surface-raised: #2a303c;
+  --surface-pressed: #20252f;
+  --highlight: rgb(255 255 255 / 0.07);
+  background: var(--surface);
+  background-image: none;
+}
+
+.build-planner header {
+  border-bottom: 1px solid rgb(255 255 255 / 0.05);
+}
+
+.build-planner > div > div.mb-8 {
+  border-color: rgb(255 255 255 / 0.07);
+}
+
 .build-planner > div > div.grid > section > section,
 .build-planner > div > div.grid > aside > section:not(:first-child) {
-  border-color: rgb(255 255 255 / 0.14);
-  background-image: linear-gradient(155deg, rgb(39 39 50 / 0.98), rgb(24 24 32 / 0.97) 52%, rgb(13 13 18 / 0.98));
-  box-shadow: 0 18px 38px rgb(0 0 0 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  border-color: transparent;
+  background: var(--surface-raised);
+  box-shadow: 10px 10px 24px rgb(13 16 22 / 0.42), -7px -7px 18px var(--highlight);
+}
+
+.build-planner > div > div.grid > aside > section:first-child {
+  border-color: rgb(167 139 250 / 0.24);
+  background: linear-gradient(145deg, #34304c, #282d3a 58%, #20252f);
+  box-shadow: 12px 12px 28px rgb(13 16 22 / 0.46), -6px -6px 16px rgb(255 255 255 / 0.06);
 }
 
 .build-planner > div > div.grid > section > section .grid > div.rounded-xl,
-.build-planner > div > div.grid > section > section label.rounded-xl {
-  border-color: rgb(255 255 255 / 0.12);
-  background-image: linear-gradient(160deg, rgb(39 39 48 / 0.78), rgb(16 16 22 / 0.9));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 8px 20px rgb(0 0 0 / 0.16);
+.build-planner > div > div.grid > section > section label.rounded-xl,
+.build-planner aside dl > div {
+  border-color: transparent;
+  background: var(--surface-pressed);
+  box-shadow: inset 4px 4px 9px rgb(12 15 20 / 0.48), inset -3px -3px 8px var(--highlight);
 }
 
 .build-planner select,
 .build-planner input[type="text"] {
-  background-image: linear-gradient(180deg, rgb(9 9 13), rgb(24 24 31));
+  border-color: transparent;
+  background: var(--surface-pressed);
+  box-shadow: inset 4px 4px 9px rgb(12 15 20 / 0.48), inset -3px -3px 8px var(--highlight);
+}
+
+.build-planner select:hover,
+.build-planner input[type="text"]:hover {
+  border-color: rgb(167 139 250 / 0.24);
+}
+
+.build-planner button.rounded-xl.bg-violet-500 {
+  background: linear-gradient(145deg, #8b6df0, #6d4ed1);
+  box-shadow: 5px 5px 12px rgb(13 16 22 / 0.42), -3px -3px 8px rgb(255 255 255 / 0.07);
+}
+
+.build-planner button.rounded-xl.bg-violet-500:hover {
+  background: linear-gradient(145deg, #9b7eff, #7658dd);
+}
+
+.build-planner button.rounded-xl.border {
+  border-color: transparent;
+  background: var(--surface-raised);
+  box-shadow: 5px 5px 12px rgb(13 16 22 / 0.35), -3px -3px 8px var(--highlight);
+}
+
+.build-planner button.rounded-xl.border:active,
+.build-planner button.rounded-xl.bg-violet-500:active {
+  box-shadow: inset 3px 3px 7px rgb(12 15 20 / 0.34), inset -2px -2px 5px var(--highlight);
+  transform: translateY(1px);
 }
