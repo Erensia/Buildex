@@ -3,10 +3,51 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin";
 import { getDb } from "@/lib/db/client";
 import { characters, echoMainStats, echoes, echoSetEchoes, echoSets, gameDataReleases, games, partyBuffs, weapons } from "@/lib/db/schema";
+import { diffReleaseRows } from "@/lib/game-data/release-diff";
+import { SUPPORTED_STAT_KEYS } from "@/lib/formula/stats";
 import { releaseActionSchema } from "@/lib/validation/game-data";
 
 async function requireAdmin() {
   return (await getCurrentAdmin()) ? null : NextResponse.json({ error: "관리자 권한이 필요합니다." }, { status: 403 });
+}
+
+const supportedStatKeys = new Set<string>(SUPPORTED_STAT_KEYS);
+const metadataStatKeys = new Set(["level", "refinement"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasInvalidStatValues(value: unknown, allowMetadata = false) {
+  if (!isRecord(value)) return true;
+  return Object.entries(value).some(([key, statValue]) =>
+    !(supportedStatKeys.has(key) || (allowMetadata && metadataStatKeys.has(key))) || typeof statValue !== "number" || !Number.isFinite(statValue));
+}
+
+async function getReleaseDiff(releaseId: string) {
+  const db = getDb();
+  const release = await db.query.gameDataReleases.findFirst({ where: eq(gameDataReleases.id, releaseId) });
+  if (!release) return { error: "릴리스를 찾을 수 없습니다." };
+  const game = await db.query.games.findFirst({ where: eq(games.id, release.gameId) });
+  if (!game?.currentDataReleaseId) return { error: "비교할 공개 릴리스를 찾을 수 없습니다." };
+  const currentId = game.currentDataReleaseId;
+  const [currentCharacters, draftCharacters, currentWeapons, draftWeapons, currentEchoes, draftEchoes, currentSets, draftSets, currentMainStats, draftMainStats] = await Promise.all([
+    db.query.characters.findMany({ where: eq(characters.releaseId, currentId) }), db.query.characters.findMany({ where: eq(characters.releaseId, releaseId) }),
+    db.query.weapons.findMany({ where: eq(weapons.releaseId, currentId) }), db.query.weapons.findMany({ where: eq(weapons.releaseId, releaseId) }),
+    db.query.echoes.findMany({ where: eq(echoes.releaseId, currentId) }), db.query.echoes.findMany({ where: eq(echoes.releaseId, releaseId) }),
+    db.query.echoSets.findMany({ where: eq(echoSets.releaseId, currentId) }), db.query.echoSets.findMany({ where: eq(echoSets.releaseId, releaseId) }),
+    db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, currentId) }), db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, releaseId) }),
+  ]);
+  const mainStatRows = (rows: typeof currentMainStats) => rows.map((row) => ({ ...row, externalKey: `${row.cost}:${row.statKey}`, name: `${row.cost}코스트 · ${row.statKey}` }));
+  return {
+    baseReleaseId: currentId,
+    baseVersion: (await db.query.gameDataReleases.findFirst({ where: eq(gameDataReleases.id, currentId) }))?.version ?? "unknown",
+    diff: {
+      characters: diffReleaseRows(currentCharacters, draftCharacters), weapons: diffReleaseRows(currentWeapons, draftWeapons),
+      echoes: diffReleaseRows(currentEchoes, draftEchoes), echoSets: diffReleaseRows(currentSets, draftSets),
+      mainStats: diffReleaseRows(mainStatRows(currentMainStats), mainStatRows(draftMainStats)),
+    },
+  };
 }
 
 async function validateRelease(releaseId: string) {
@@ -26,8 +67,10 @@ async function validateRelease(releaseId: string) {
   if (!weaponRows.length) errors.push("무기가 한 개 이상 필요합니다.");
   if (!echoRows.length || !setRows.length || !mainStatRows.length) errors.push("에코·에코 세트·주옵션 데이터를 모두 등록해야 합니다.");
   if (!Array.isArray(release.sourceManifest) || !release.sourceManifest.length) errors.push("릴리스 출처가 한 개 이상 필요합니다.");
+  if (characterRows.some((character) => !isRecord(character.baseStats) || typeof character.baseStats.baseAttack !== "number" || !Number.isFinite(character.baseStats.baseAttack) || character.baseStats.baseAttack < 0 || typeof character.baseStats.weaponType !== "string" || !character.baseStats.weaponType || typeof character.baseStats.element !== "string" || !character.baseStats.element)) errors.push("모든 캐릭터에는 유효한 기초 공격력·속성·무기 타입이 필요합니다.");
+  if (weaponRows.some((weapon) => hasInvalidStatValues(weapon.stats, true)) || echoRows.some((echo) => hasInvalidStatValues(echo.stats))) errors.push("무기·에코 스탯에는 지원되는 유한한 숫자 키만 사용할 수 있습니다.");
   if (partyBuffRows.some((buff) => !characterRows.some((character) => character.externalKey === buff.targetCharacterKey) || !characterRows.some((character) => character.externalKey === buff.providerCharacterKey))) errors.push("파티 버프의 대상 또는 제공 캐릭터가 이 릴리스에 없습니다.");
-  if (partyBuffRows.some((buff) => !buff.stats || typeof buff.stats !== "object" || Array.isArray(buff.stats) || !Object.values(buff.stats as Record<string, unknown>).every((value) => typeof value === "number" && Number.isFinite(value)))) errors.push("파티 버프의 스탯 값은 유한한 숫자 객체여야 합니다.");
+  if (partyBuffRows.some((buff) => hasInvalidStatValues(buff.stats))) errors.push("파티 버프에는 지원되는 유한한 숫자 스탯 키만 사용할 수 있습니다.");
   const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion && row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);
   if (mismatched) errors.push("모든 데이터 행의 버전과 검증일은 릴리스 정보와 일치해야 합니다.");
   const memberships = setRows.length && echoRows.length ? await db.select().from(echoSetEchoes).where(and(inArray(echoSetEchoes.echoSetId, setRows.map((row) => row.id)), inArray(echoSetEchoes.echoId, echoRows.map((row) => row.id)))) : [];
@@ -39,10 +82,7 @@ async function validateRelease(releaseId: string) {
   const requiredCosts = [1, 3, 4];
   if (requiredCosts.some((cost) => !mainStatRows.some((stat) => stat.cost === cost))) errors.push("1·3·4 코스트별 에코 주옵션이 하나 이상 필요합니다.");
   const weaponTypes = new Set(weaponRows.map((weapon) => weapon.weaponType));
-  if (characterRows.some((character) => {
-    const weaponType = (character.baseStats as { weaponType?: unknown }).weaponType;
-    return typeof weaponType === "string" && !weaponTypes.has(weaponType);
-  })) errors.push("모든 캐릭터 무기 타입에 맞는 무기가 하나 이상 필요합니다.");
+  if (characterRows.some((character) => !isRecord(character.baseStats) || typeof character.baseStats.weaponType !== "string" || !weaponTypes.has(character.baseStats.weaponType))) errors.push("모든 캐릭터 무기 타입에 맞는 무기가 하나 이상 필요합니다.");
   return { errors, release };
 }
 
@@ -62,6 +102,10 @@ export async function POST(request: Request) {
   const db = getDb();
 
   if (parsed.data.action === "validate") return NextResponse.json(await validateRelease(parsed.data.releaseId));
+  if (parsed.data.action === "diff") {
+    const result = await getReleaseDiff(parsed.data.releaseId);
+    return "error" in result ? NextResponse.json(result, { status: 404 }) : NextResponse.json(result);
+  }
   if (parsed.data.action === "publish") {
     const validation = await validateRelease(parsed.data.releaseId);
     if (!validation.release || validation.errors.length) return NextResponse.json({ error: "발행 검증을 통과하지 못했습니다.", errors: validation.errors }, { status: 400 });
@@ -72,11 +116,14 @@ export async function POST(request: Request) {
         const [published] = await tx.update(gameDataReleases).set({ status: "published", publishedAt: new Date() }).where(and(eq(gameDataReleases.id, validation.release!.id), eq(gameDataReleases.status, "draft"))).returning({ id: gameDataReleases.id });
         if (!published) throw new Error("릴리스 상태가 변경되어 발행할 수 없습니다.");
         await tx.update(games).set({ currentDataReleaseId: validation.release!.id, currentDataVersion: validation.release!.version, sourceSnapshot: validation.release!.sourceSnapshot, updatedAt: new Date() }).where(eq(games.id, validation.release!.gameId));
+        const [smokeGame] = await tx.select({ currentDataReleaseId: games.currentDataReleaseId }).from(games).where(eq(games.id, validation.release!.gameId));
+        const [smokeRelease] = await tx.select({ status: gameDataReleases.status }).from(gameDataReleases).where(eq(gameDataReleases.id, validation.release!.id));
+        if (smokeGame?.currentDataReleaseId !== validation.release!.id || smokeRelease?.status !== "published") throw new Error("발행 후 공개 릴리스 스모크 검증에 실패했습니다.");
       });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "다른 발행 작업과 충돌했습니다. 다시 시도해 주세요." }, { status: 409 });
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, smoke: { passed: true, releaseId: validation.release.id } });
   }
 
   const game = await db.query.games.findFirst({ where: eq(games.slug, parsed.data.gameSlug) });

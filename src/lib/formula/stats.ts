@@ -24,6 +24,13 @@ export type StatKey =
 
 export type StatValues = Partial<Record<StatKey, number>>;
 
+export const SUPPORTED_STAT_KEYS = [
+  "baseAttack", "flatAttack", "attackPercent", "flatHealth", "healthPercent", "flatDefense", "defensePercent",
+  "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus", "glacioDamageBonus",
+  "electroDamageBonus", "aeroDamageBonus", "havocDamageBonus", "basicAttackDamageBonus", "heavyAttackDamageBonus",
+  "resonanceSkillDamageBonus", "resonanceLiberationDamageBonus",
+] as const satisfies readonly StatKey[];
+
 /** Values that every resonator has before any character, weapon, Echo, or buff data. */
 export const STANDARD_BASE_STATS = {
   critRate: 5,

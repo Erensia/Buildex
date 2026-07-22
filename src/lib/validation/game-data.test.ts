@@ -11,7 +11,7 @@ const character = {
   dataVersion: "3.5",
   sourceSnapshot: "2026-07-16",
   sourceUrl: "https://example.com/source",
-  baseStats: { baseAttack: 400, weaponType: "sword" },
+  baseStats: { baseAttack: 400, element: "fusion", weaponType: "sword" },
 };
 
 describe("gameDataSchema", () => {
@@ -22,6 +22,12 @@ describe("gameDataSchema", () => {
   it("requires a valid source URL and snapshot date", () => {
     expect(gameDataSchema.safeParse({ ...character, sourceUrl: "not-a-url" }).success).toBe(false);
     expect(gameDataSchema.safeParse({ ...character, sourceSnapshot: "2026/07/16" }).success).toBe(false);
+  });
+
+  it("rejects unsupported stat keys and incomplete character base stats", () => {
+    expect(gameDataSchema.safeParse({ ...character, baseStats: { baseAttack: 400, weaponType: "sword" } }).success).toBe(false);
+    expect(gameDataSchema.safeParse({ ...character, entity: "weapon", weaponType: "sword", stats: { unsupported: 1 } }).success).toBe(false);
+    expect(gameDataSchema.safeParse({ ...character, entity: "mainStat", cost: 3, statKey: "unsupported", value: 30 }).success).toBe(false);
   });
 
   it("accepts a traceable party bundle and rejects duplicate character keys", () => {
