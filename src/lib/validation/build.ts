@@ -38,6 +38,7 @@ export const buildInputSchema = z.object({
     }
   }),
   activeBuffIds: z.array(z.string().min(1).max(80)).max(10).default([]),
+  partyMemberKeys: z.array(z.string().min(1).max(80)).max(2).default([]),
   formulaVersion: z.string().min(1).max(32),
 });
 

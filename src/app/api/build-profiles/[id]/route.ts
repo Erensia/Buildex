@@ -6,12 +6,13 @@ import { buildProfiles } from "@/lib/db/schema";
 import { buildInputSchema } from "@/lib/validation/build";
 import { getBuildReferences } from "@/lib/build-profiles";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
-import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
+import { CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
 import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
-import { HIYUKI_CHISA_LUCILLA_BUFFS, HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/hiyuki-chisa-lucilla";
+import { HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/hiyuki-chisa-lucilla";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import { getEchoStatSources } from "@/lib/build-calculation";
 import { FORMULA_VERSION } from "@/lib/formula/versions";
+import { getPersonalBuffs, resolvePartyBuffs } from "@/lib/formula/party-buffs";
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -32,18 +33,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const profile = await getOwnedBuildProfile(id, user.id);
   if (!profile) return NextResponse.json({ error: "Build profile not found." }, { status: 404 });
 
-  const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey), profile.dataReleaseId);
+  const references = await getBuildReferences(parsed.data.characterKey, parsed.data.weaponKey, parsed.data.echoes.map((echo) => echo.setKey), parsed.data.echoes.map((echo) => echo.echoKey), profile.dataReleaseId, parsed.data.partyMemberKeys);
   const referenceError = validateBuildReferences(parsed.data, references);
   if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
-  const { character, weapon, sets, release } = references;
+  const { character, weapon, partyBuffs, sets, release } = references;
   if (!character || !weapon || !release) return NextResponse.json({ error: "Selected character or weapon was not found." }, { status: 400 });
   const setEffects = resolveEchoSetEffects(parsed.data.echoes.map((echo) => echo.setKey), sets.map((set) => ({ externalKey: set.externalKey, name: set.name, effects: set.effects as Record<string, unknown> })));
+  const availableBuffs = [...getPersonalBuffs(character.externalKey, weapon.externalKey), ...resolvePartyBuffs(character.externalKey, parsed.data.partyMemberKeys, partyBuffs).filter((evidence) => evidence.available).map((evidence) => evidence.buff), ...setEffects.conditionalBuffs];
   const result = calculateBuildStats({
     character: { id: character.externalKey, label: character.name, stats: character.baseStats as { baseAttack?: number; critRate?: number } },
     weapon: { id: weapon.externalKey, label: weapon.name, stats: weapon.stats as { baseAttack?: number; critDamage?: number } },
     echoes: [...getEchoStatSources(parsed.data, references.mainStats), ...setEffects.automaticSources],
     activeBuffIds: parsed.data.activeBuffIds,
-  }, [...(character.externalKey === "changli" ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon.externalKey === "blazing-brilliance") : character.externalKey === "hiyuki" ? HIYUKI_CHISA_LUCILLA_BUFFS : []), ...setEffects.conditionalBuffs]);
+  }, availableBuffs);
   const calculatedResult = {
     ...result,
     grade: character.externalKey === "changli"
