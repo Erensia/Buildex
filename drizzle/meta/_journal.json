@@ -98,6 +98,8 @@
       "version": "7",
       "when": 1784730005000,
       "tag": "0013_add_build_favorites_and_party_profiles",
+      "when": 1784365200000,
+      "tag": "0008_party_buffs",
       "breakpoints": true
     }
   ]

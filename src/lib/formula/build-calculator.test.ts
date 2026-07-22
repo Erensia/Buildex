@@ -16,6 +16,16 @@ describe("calculateBuildStats", () => {
     expect(result).toMatchObject({ attack: 2600, critRate: 79.3, critDamage: 270, energyRegen: 130, fusionDamageBonus: 60, spectroDamageBonus: 60 });
   });
 
+  it("adds the universal starting stats when Echo substats are present", () => {
+    const result = calculateBuildStats({
+      character: { id: "character", label: "Character", stats: { baseAttack: 500 } },
+      weapon: { id: "weapon", label: "Weapon", stats: { baseAttack: 500, critDamage: 48.6 } },
+      echoes: [{ id: "echoes", label: "Echoes", stats: { critRate: 47.5, critDamage: 103.8, energyRegen: 24.8 } }],
+    });
+
+    expect(result).toMatchObject({ critRate: 52.5, critDamage: 302.4, energyRegen: 124.8 });
+  });
+
   it("only applies party buffs whose conditions were confirmed", () => {
     const withoutBuff = calculateBuildStats(baselineBuild, CHANGLI_LUPA_BRANT_BUFFS);
     const withBuff = calculateBuildStats({ ...baselineBuild, activeBuffIds: ["lupa-fusion-window", "brant-fusion-window"] }, CHANGLI_LUPA_BRANT_BUFFS);

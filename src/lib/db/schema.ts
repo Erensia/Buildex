@@ -119,6 +119,17 @@ export const echoMainStats = pgTable("echo_main_stats", {
   sourceUrl: text("source_url").notNull(),
 }, (table) => [uniqueIndex("echo_main_stat_release_cost_key_idx").on(table.releaseId, table.cost, table.statKey)]);
 
+export const partyBuffs = pgTable("party_buffs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  releaseId: uuid("release_id").notNull().references(() => gameDataReleases.id, { onDelete: "restrict" }),
+  targetCharacterKey: varchar("target_character_key", { length: 80 }).notNull(),
+  providerCharacterKey: varchar("provider_character_key", { length: 80 }).notNull(),
+  externalKey: varchar("external_key", { length: 80 }).notNull(),
+  label: varchar("label", { length: 160 }).notNull(),
+  condition: text("condition").notNull(),
+  stats: jsonb("stats").notNull(),
+}, (table) => [uniqueIndex("party_buff_release_key_idx").on(table.releaseId, table.externalKey)]);
+
 export const buildProfiles = pgTable("build_profiles", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

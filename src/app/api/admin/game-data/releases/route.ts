@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/admin";
 import { getDb } from "@/lib/db/client";
-import { characters, echoMainStats, echoes, echoSetEchoes, echoSets, gameDataReleases, games, weapons } from "@/lib/db/schema";
+import { characters, echoMainStats, echoes, echoSetEchoes, echoSets, gameDataReleases, games, partyBuffs, weapons } from "@/lib/db/schema";
 import { releaseActionSchema } from "@/lib/validation/game-data";
 
 async function requireAdmin() {
@@ -13,12 +13,13 @@ async function validateRelease(releaseId: string) {
   const db = getDb();
   const release = await db.query.gameDataReleases.findFirst({ where: eq(gameDataReleases.id, releaseId) });
   if (!release) return { errors: ["릴리스를 찾을 수 없습니다."], release: null };
-  const [characterRows, weaponRows, echoRows, setRows, mainStatRows] = await Promise.all([
+  const [characterRows, weaponRows, echoRows, setRows, mainStatRows, partyBuffRows] = await Promise.all([
     db.query.characters.findMany({ where: eq(characters.releaseId, releaseId) }),
     db.query.weapons.findMany({ where: eq(weapons.releaseId, releaseId) }),
     db.query.echoes.findMany({ where: eq(echoes.releaseId, releaseId) }),
     db.query.echoSets.findMany({ where: eq(echoSets.releaseId, releaseId) }),
     db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, releaseId) }),
+    db.query.partyBuffs.findMany({ where: eq(partyBuffs.releaseId, releaseId) }),
   ]);
   const errors: string[] = [];
   if (!characterRows.length) errors.push("캐릭터가 한 명 이상 필요합니다.");
@@ -26,6 +27,9 @@ async function validateRelease(releaseId: string) {
   if (!echoRows.length || !setRows.length || !mainStatRows.length) errors.push("에코·에코 세트·주옵션 데이터를 모두 등록해야 합니다.");
   if (!Array.isArray(release.sourceManifest) || !release.sourceManifest.length) errors.push("릴리스 출처가 한 개 이상 필요합니다.");
   const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);
+  if (partyBuffRows.some((buff) => !characterRows.some((character) => character.externalKey === buff.targetCharacterKey) || !characterRows.some((character) => character.externalKey === buff.providerCharacterKey))) errors.push("파티 버프의 대상 또는 제공 캐릭터가 이 릴리스에 없습니다.");
+  if (partyBuffRows.some((buff) => !buff.stats || typeof buff.stats !== "object" || Array.isArray(buff.stats) || !Object.values(buff.stats as Record<string, unknown>).every((value) => typeof value === "number" && Number.isFinite(value)))) errors.push("파티 버프의 스탯 값은 유한한 숫자 객체여야 합니다.");
+  const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion && row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);
   if (mismatched) errors.push("모든 데이터 행의 버전과 검증일은 릴리스 정보와 일치해야 합니다.");
   const memberships = setRows.length && echoRows.length ? await db.select().from(echoSetEchoes).where(and(inArray(echoSetEchoes.echoSetId, setRows.map((row) => row.id)), inArray(echoSetEchoes.echoId, echoRows.map((row) => row.id)))) : [];
   if (!memberships.length) errors.push("에코 세트 구성 데이터가 필요합니다.");
@@ -81,9 +85,9 @@ export async function POST(request: Request) {
   const source = await db.query.gameDataReleases.findFirst({ where: eq(gameDataReleases.id, game.currentDataReleaseId) });
   if (!source) return NextResponse.json({ error: "복제할 공개 릴리스를 찾을 수 없습니다." }, { status: 400 });
 
-  const [characterRows, weaponRows, echoRows, setRows, mainStatRows] = await Promise.all([
+  const [characterRows, weaponRows, echoRows, setRows, mainStatRows, partyBuffRows] = await Promise.all([
     db.query.characters.findMany({ where: eq(characters.releaseId, source.id) }), db.query.weapons.findMany({ where: eq(weapons.releaseId, source.id) }),
-    db.query.echoes.findMany({ where: eq(echoes.releaseId, source.id) }), db.query.echoSets.findMany({ where: eq(echoSets.releaseId, source.id) }), db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, source.id) }),
+    db.query.echoes.findMany({ where: eq(echoes.releaseId, source.id) }), db.query.echoSets.findMany({ where: eq(echoSets.releaseId, source.id) }), db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, source.id) }), db.query.partyBuffs.findMany({ where: eq(partyBuffs.releaseId, source.id) }),
   ]);
   const memberships = await db.select().from(echoSetEchoes).where(and(inArray(echoSetEchoes.echoSetId, setRows.map((row) => row.id)), inArray(echoSetEchoes.echoId, echoRows.map((row) => row.id))));
   const [draft] = await db.insert(gameDataReleases).values({ gameId: game.id, version: parsed.data.version, status: "draft", sourceSnapshot: parsed.data.sourceSnapshot, sourceManifest: parsed.data.sourceManifest, notes: parsed.data.notes }).returning();
@@ -92,6 +96,7 @@ export async function POST(request: Request) {
     db.insert(weapons).values(weaponRows.map((row) => ({ gameId: row.gameId, releaseId: draft.id, externalKey: row.externalKey, name: row.name, weaponType: row.weaponType, stats: row.stats, dataVersion: draft.version, sourceSnapshot: draft.sourceSnapshot, sourceUrl: row.sourceUrl }))),
     db.insert(echoes).values(echoRows.map((row) => ({ gameId: row.gameId, releaseId: draft.id, externalKey: row.externalKey, name: row.name, cost: row.cost, stats: row.stats, dataVersion: draft.version, sourceSnapshot: draft.sourceSnapshot, sourceUrl: row.sourceUrl }))),
     db.insert(echoMainStats).values(mainStatRows.map((row) => ({ gameId: row.gameId, releaseId: draft.id, cost: row.cost, statKey: row.statKey, value: row.value, dataVersion: draft.version, sourceSnapshot: draft.sourceSnapshot, sourceUrl: row.sourceUrl }))),
+    partyBuffRows.length ? db.insert(partyBuffs).values(partyBuffRows.map((row) => ({ releaseId: draft.id, targetCharacterKey: row.targetCharacterKey, providerCharacterKey: row.providerCharacterKey, externalKey: row.externalKey, label: row.label, condition: row.condition, stats: row.stats }))) : Promise.resolve(),
   ]);
   const newSets = await db.insert(echoSets).values(setRows.map((row) => ({ gameId: row.gameId, releaseId: draft.id, externalKey: row.externalKey, name: row.name, effects: row.effects, dataVersion: draft.version, sourceSnapshot: draft.sourceSnapshot, sourceUrl: row.sourceUrl }))).returning({ id: echoSets.id, externalKey: echoSets.externalKey });
   const newEchoes = await db.query.echoes.findMany({ where: eq(echoes.releaseId, draft.id), columns: { id: true, externalKey: true } });
