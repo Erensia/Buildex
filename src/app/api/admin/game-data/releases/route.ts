@@ -26,7 +26,6 @@ async function validateRelease(releaseId: string) {
   if (!weaponRows.length) errors.push("무기가 한 개 이상 필요합니다.");
   if (!echoRows.length || !setRows.length || !mainStatRows.length) errors.push("에코·에코 세트·주옵션 데이터를 모두 등록해야 합니다.");
   if (!Array.isArray(release.sourceManifest) || !release.sourceManifest.length) errors.push("릴리스 출처가 한 개 이상 필요합니다.");
-  const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);
   if (partyBuffRows.some((buff) => !characterRows.some((character) => character.externalKey === buff.targetCharacterKey) || !characterRows.some((character) => character.externalKey === buff.providerCharacterKey))) errors.push("파티 버프의 대상 또는 제공 캐릭터가 이 릴리스에 없습니다.");
   if (partyBuffRows.some((buff) => !buff.stats || typeof buff.stats !== "object" || Array.isArray(buff.stats) || !Object.values(buff.stats as Record<string, unknown>).every((value) => typeof value === "number" && Number.isFinite(value)))) errors.push("파티 버프의 스탯 값은 유한한 숫자 객체여야 합니다.");
   const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion && row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);

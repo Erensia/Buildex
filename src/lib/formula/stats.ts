@@ -14,12 +14,33 @@ export type StatKey =
   | "fusionDamageBonus"
   | "spectroDamageBonus"
   | "glacioDamageBonus"
+  | "electroDamageBonus"
+  | "aeroDamageBonus"
+  | "havocDamageBonus"
   | "basicAttackDamageBonus"
   | "heavyAttackDamageBonus"
   | "resonanceSkillDamageBonus"
   | "resonanceLiberationDamageBonus";
 
 export type StatValues = Partial<Record<StatKey, number>>;
+
+/** Values that every resonator has before any character, weapon, Echo, or buff data. */
+export const STANDARD_BASE_STATS = {
+  critRate: 5,
+  critDamage: 150,
+  energyRegen: 100,
+} as const;
+
+/** Adds stat contributions without allowing a later source to overwrite an earlier one. */
+export function addStats(...sources: StatValues[]): StatValues {
+  return sources.reduce<StatValues>((total, source) => {
+    for (const [key, value] of Object.entries(source)) {
+      const statKey = key as StatKey;
+      total[statKey] = (total[statKey] ?? 0) + (value ?? 0);
+    }
+    return total;
+  }, {});
+}
 
 export interface StatSource {
   id: string;
@@ -46,6 +67,9 @@ export interface CalculatedStats {
   fusionDamageBonus: number;
   spectroDamageBonus: number;
   glacioDamageBonus: number;
+  electroDamageBonus: number;
+  aeroDamageBonus: number;
+  havocDamageBonus: number;
   basicAttackDamageBonus: number;
   heavyAttackDamageBonus: number;
   resonanceSkillDamageBonus: number;

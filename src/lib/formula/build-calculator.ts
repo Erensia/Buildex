@@ -1,3 +1,4 @@
+import { addStats, STANDARD_BASE_STATS } from "./stats";
 import type {
   BuildCalculationInput,
   CalculatedStats,
@@ -9,24 +10,7 @@ import type {
 } from "./stats";
 import { BUILD_GRADE, type BuildGrade } from "./versions";
 
-/**
- * Combat stats every resonator starts with before gear, weapon, Echo, and buff
- * contributions are added. Game data stores only those contributions, so these
- * must not depend on a source containing the stat.
- */
-const STANDARD_BASE_STATS = {
-  critRate: 5,
-  critDamage: 150,
-  energyRegen: 100,
-} as const;
-
-const sumStats = (sources: StatSource[]): StatValues => sources.reduce<StatValues>((total, source) => {
-  for (const [key, value] of Object.entries(source.stats)) {
-    const statKey = key as keyof StatValues;
-    total[statKey] = (total[statKey] ?? 0) + (value ?? 0);
-  }
-  return total;
-}, {});
+const sumStats = (sources: StatSource[]): StatValues => addStats(...sources.map((source) => source.stats));
 
 /**
  * Calculates the values displayed to the user. Damage multipliers are intentionally
@@ -44,15 +28,15 @@ export function calculateBuildStats(
 
   return {
     attack: round(baseAttack * (1 + (stats.attackPercent ?? 0) / 100) + (stats.flatAttack ?? 0)),
-    critRate: round(5 + (stats.critRate ?? 0)),
-    critDamage: round(150 + (stats.critDamage ?? 0)),
-    energyRegen: round(100 + (stats.energyRegen ?? 0)),
     critRate: round(STANDARD_BASE_STATS.critRate + (stats.critRate ?? 0)),
     critDamage: round(STANDARD_BASE_STATS.critDamage + (stats.critDamage ?? 0)),
     energyRegen: round(STANDARD_BASE_STATS.energyRegen + (stats.energyRegen ?? 0)),
     fusionDamageBonus: round(stats.fusionDamageBonus ?? 0),
     spectroDamageBonus: round(stats.spectroDamageBonus ?? 0),
     glacioDamageBonus: round(stats.glacioDamageBonus ?? 0),
+    electroDamageBonus: round(stats.electroDamageBonus ?? 0),
+    aeroDamageBonus: round(stats.aeroDamageBonus ?? 0),
+    havocDamageBonus: round(stats.havocDamageBonus ?? 0),
     basicAttackDamageBonus: round(stats.basicAttackDamageBonus ?? 0),
     heavyAttackDamageBonus: round(stats.heavyAttackDamageBonus ?? 0),
     resonanceSkillDamageBonus: round(stats.resonanceSkillDamageBonus ?? 0),
