@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { calculateBuildStats, evaluateBuildGrade } from "@/lib/formula/build-calculator";
-import { CHANGLI_LUPA_BRANT_BUFFS, CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
+import { CHANGLI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/changli-lupa-brant";
 import { ZANI_S0_GRADE_REQUIREMENTS } from "@/lib/formula/zani-phoebe-verina";
-import { HIYUKI_CHISA_LUCILLA_BUFFS, HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/hiyuki-chisa-lucilla";
+import { HIYUKI_S0_SIGNATURE_GRADE_REQUIREMENTS } from "@/lib/formula/hiyuki-chisa-lucilla";
+import { getPersonalBuffs, resolvePartyBuffs } from "@/lib/formula/party-buffs";
 import { FORMULA_VERSION } from "@/lib/formula/versions";
 import { resolveEchoSetEffects } from "@/lib/formula/echo-sets";
 import type { StatKey, StatValues } from "@/lib/formula/stats";
@@ -19,8 +20,9 @@ type Weapon = { externalKey: string; name: string; weaponType: string; stats: St
 type Echo = { id: string; externalKey: string; name: string; cost: 1 | 3 | 4 };
 type EchoSet = { id: string; externalKey: string; name: string; effects: Record<string, unknown> };
 type MainStat = { cost: 1 | 3 | 4; statKey: StatKey; value: number };
-type BuildData = { games: { name: string; currentDataVersion: string | null; sourceSnapshot: string | null; sourceUrl: string | null; releaseId: string }[]; characters: Character[]; weapons: Weapon[]; echoes: Echo[]; echoSets: EchoSet[]; mainStats: MainStat[]; echoSetMemberships: { echoSetId: string; echoId: string }[] };
-type BuildInput = { name: string; characterKey: string; weaponKey: string; echoes: { slot: number; echoKey?: string; setKey: string; cost: 1 | 3 | 4; mainStat: string; subStats: { key: string; value: number }[] }[]; activeBuffIds: string[]; formulaVersion: string };
+type PartyBuff = { targetCharacterKey: string; providerCharacterKey: string; externalKey: string; label: string; condition: string; stats: StatValues };
+type BuildData = { games: { name: string; currentDataVersion: string | null; sourceSnapshot: string | null; sourceUrl: string | null; releaseId: string }[]; characters: Character[]; weapons: Weapon[]; echoes: Echo[]; echoSets: EchoSet[]; mainStats: MainStat[]; partyBuffs: PartyBuff[]; echoSetMemberships: { echoSetId: string; echoId: string }[] };
+type BuildInput = { name: string; characterKey: string; weaponKey: string; echoes: { slot: number; echoKey?: string; setKey: string; cost: 1 | 3 | 4; mainStat: string; subStats: { key: string; value: number }[] }[]; activeBuffIds: string[]; partyMemberKeys: string[]; formulaVersion: string };
 type SavedProfile = { id: string; name: string; dataReleaseId: string | null; dataVersion: string; buildInput: BuildInput; calculatedResult: { attack: number; critRate: number; critDamage: number; energyRegen: number; fusionDamageBonus: number; spectroDamageBonus?: number; glacioDamageBonus?: number; resonanceSkillDamageBonus: number; grade?: string | null } };
 
 const slots: { slot: number; cost: 1 | 3 | 4 }[] = [{ slot: 1, cost: 4 }, { slot: 2, cost: 3 }, { slot: 3, cost: 3 }, { slot: 4, cost: 1 }, { slot: 5, cost: 1 }];
@@ -46,6 +48,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
   const [mainStats, setMainStats] = useState<string[]>([]);
   const [subStats, setSubStats] = useState<StatValues[]>([]);
   const [activeBuffIds, setActiveBuffIds] = useState<string[]>([]);
+  const [partyMemberKeys, setPartyMemberKeys] = useState<string[]>([]);
   const [message, setMessage] = useState<string>();
   const [saving, setSaving] = useState(false);
 
@@ -71,9 +74,9 @@ export function BuildPlanner({ userName }: { userName: string }) {
   const character = data?.characters?.find((item) => item.externalKey === characterKey);
   const compatibleWeapons = useMemo(() => data?.weapons?.filter((weapon) => !character?.baseStats.weaponType || weapon.weaponType === character.baseStats.weaponType) ?? [], [data, character]);
   const weapon = compatibleWeapons.find((item) => item.externalKey === weaponKey) ?? compatibleWeapons[0];
-  const buffs = useMemo(() => characterKey === "changli"
-    ? CHANGLI_LUPA_BRANT_BUFFS.filter((buff) => buff.id !== "changli-signature-max-stacks" || weapon?.externalKey === "blazing-brilliance")
-    : characterKey === "hiyuki" ? HIYUKI_CHISA_LUCILLA_BUFFS : [], [characterKey, weapon?.externalKey]);
+  const selectedPartyMemberKeys = useMemo(() => partyMemberKeys.filter((member) => member !== characterKey), [characterKey, partyMemberKeys]);
+  const partyBuffEvidence = useMemo(() => resolvePartyBuffs(characterKey, selectedPartyMemberKeys, data?.partyBuffs ?? []), [characterKey, data?.partyBuffs, selectedPartyMemberKeys]);
+  const buffs = useMemo(() => [...getPersonalBuffs(characterKey, weapon?.externalKey), ...partyBuffEvidence.filter((evidence) => evidence.available).map((evidence) => evidence.buff)], [characterKey, partyBuffEvidence, weapon?.externalKey]);
   const optionsFor = useCallback((cost: 1 | 3 | 4) => data?.mainStats.filter((item) => item.cost === cost) ?? [], [data]);
   const echoesFor = useCallback((setKey: string, cost: 1 | 3 | 4) => {
     const echoSet = data?.echoSets.find((item) => item.externalKey === setKey);
@@ -118,10 +121,11 @@ export function BuildPlanner({ userName }: { userName: string }) {
   }
 
   function payload(): BuildInput { return { name, characterKey, weaponKey: weaponKey || weapon?.externalKey || "", echoes: slots.map((slot, index) => ({ slot: slot.slot, echoKey: echoKeys[index], setKey: setKeys[index] ?? "", cost: slot.cost, mainStat: mainStats[index], subStats: Object.entries(subStats[index] ?? {}).map(([key, value]) => ({ key, value: value ?? 0 })) })), activeBuffIds, formulaVersion: FORMULA_VERSION }; }
+  function payload(): BuildInput { return { name, characterKey, weaponKey: weaponKey || weapon?.externalKey || "", echoes: slots.map((slot, index) => ({ slot: slot.slot, echoKey: echoKeys[index], setKey: setKeys[index] ?? "", cost: slot.cost, mainStat: mainStats[index], subStats: Object.entries(subStats[index] ?? {}).map(([key, value]) => ({ key, value: value ?? 0 })) })), activeBuffIds: activeBuffIds.filter((id) => buffs.some((buff) => buff.id === id)), partyMemberKeys: selectedPartyMemberKeys, formulaVersion: FORMULA_VERSION }; }
   async function save() { setSaving(true); setMessage(undefined); const response = await fetch(profileId ? `/api/build-profiles/${profileId}` : "/api/build-profiles", { method: profileId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) }); const body = await response.json().catch(() => null); if (!response.ok) setMessage(body?.error ?? "빌드를 저장하지 못했습니다."); else { setProfiles((current) => profileId ? current.map((item) => item.id === body.id ? body : item) : [body, ...current]); setProfileId(body.id); setMessage("빌드를 저장했습니다."); } setSaving(false); }
-  function applyInput(input: BuildInput) { setName(input.name); setCharacterKey(input.characterKey); setWeaponKey(input.weaponKey); setSetKeys(input.echoes.map((echo) => echo.setKey)); setEchoKeys(input.echoes.map((echo) => echo.echoKey ?? "")); setMainStats(input.echoes.map((echo) => echo.mainStat)); setSubStats(input.echoes.map((echo) => Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) as StatValues)); setActiveBuffIds(input.activeBuffIds); }
+  function applyInput(input: BuildInput) { setName(input.name); setCharacterKey(input.characterKey); setWeaponKey(input.weaponKey); setSetKeys(input.echoes.map((echo) => echo.setKey)); setEchoKeys(input.echoes.map((echo) => echo.echoKey ?? "")); setMainStats(input.echoes.map((echo) => echo.mainStat)); setSubStats(input.echoes.map((echo) => Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) as StatValues)); setActiveBuffIds(input.activeBuffIds); setPartyMemberKeys(input.partyMemberKeys ?? []); }
   async function load(profile: SavedProfile) { const loadedReleaseId = data?.games[0]?.releaseId; if (profile.dataReleaseId && profile.dataReleaseId !== loadedReleaseId) { const response = await fetch(`/api/build-data?releaseId=${encodeURIComponent(profile.dataReleaseId)}`); const historicalData = await response.json().catch(() => null); if (!response.ok) { setMessage(historicalData?.error ?? "저장 당시의 게임 데이터를 불러올 수 없습니다."); return; } setData(historicalData as BuildData); } applyInput(profile.buildInput); setProfileId(profile.id); setMessage(`${profile.name}을 저장 당시 데이터(v${profile.dataVersion})로 불러왔습니다.`); }
-  function newBuild() { if (latestData) setData(latestData); setProfileId(undefined); setName("새 빌드"); setSubStats(slots.map(() => ({}))); setActiveBuffIds([]); setMessage("현재 공개 데이터로 새 빌드를 만듭니다."); }
+  function newBuild() { if (latestData) setData(latestData); setProfileId(undefined); setName("새 빌드"); setSubStats(slots.map(() => ({}))); setActiveBuffIds([]); setPartyMemberKeys([]); setMessage("현재 공개 데이터로 새 빌드를 만듭니다."); }
   function duplicate(profile: SavedProfile) { if (latestData) setData(latestData); applyInput(profile.buildInput); setProfileId(undefined); setName(`${profile.name} 복사본`); setMessage("현재 공개 데이터로 복사했습니다. 호환되지 않는 선택지는 저장 전에 조정해 주세요."); }
   async function remove(id: string) { if (!window.confirm("이 빌드를 삭제할까요? 이 작업은 되돌릴 수 없습니다.")) return; const response = await fetch(`/api/build-profiles/${id}`, { method: "DELETE" }); if (response.ok) { setProfiles((items) => items.filter((item) => item.id !== id)); if (profileId === id) newBuild(); } }
 
@@ -134,6 +138,15 @@ export function BuildPlanner({ userName }: { userName: string }) {
       <Link className="text-lg font-black tracking-tight text-white" href="/">BUILDEX<span className="text-violet-400">.</span></Link>
       <div className="flex items-center gap-3 text-sm"><span className="hidden text-zinc-400 sm:block">{userName}</span><button className="rounded-lg border border-white/10 px-3 py-1.5 text-zinc-300 transition hover:border-white/25 hover:text-white" onClick={() => signOut({ callbackUrl: "/" })}>로그아웃</button></div>
     </header>
+
+    <section className="mx-auto max-w-7xl px-5 pb-2 sm:px-8">
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/65 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-bold tracking-[.16em] text-violet-300">PARTY STAT CALCULATION</p><h2 className="mt-1 text-lg font-bold">파티 편성 및 버프 근거</h2><p className="mt-1 text-xs text-zinc-500">지원 캐릭터가 편성돼야 해당 파티 버프를 활성화할 수 있습니다. DPS는 계산하지 않습니다.</p></div><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-medium text-zinc-400">지원 캐릭터 1<select className={inputClass} value={partyMemberKeys[0] ?? ""} onChange={(event) => setPartyMemberKeys((members) => [event.target.value, members[1]].filter(Boolean))}><option value="">선택 안 함</option>{data.characters.filter((item) => item.externalKey !== characterKey && item.externalKey !== partyMemberKeys[1]).map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label><label className="text-xs font-medium text-zinc-400">지원 캐릭터 2<select className={inputClass} value={partyMemberKeys[1] ?? ""} onChange={(event) => setPartyMemberKeys((members) => [members[0], event.target.value].filter(Boolean))}><option value="">선택 안 함</option>{data.characters.filter((item) => item.externalKey !== characterKey && item.externalKey !== partyMemberKeys[0]).map((item) => <option key={item.externalKey} value={item.externalKey}>{item.name}</option>)}</select></label></div></div>
+        {partyBuffEvidence.length > 0 && <ul className="mt-4 grid gap-2 md:grid-cols-2">{partyBuffEvidence.map((evidence) => { const provider = data.characters.find((item) => item.externalKey === evidence.requiredMemberKey)?.name ?? evidence.requiredMemberKey; return <li className={`rounded-xl border p-3 text-xs ${evidence.available ? "border-emerald-400/25 bg-emerald-400/5 text-emerald-100" : "border-white/8 bg-black/15 text-zinc-500"}`} key={evidence.buff.id}><strong className="block">{evidence.available ? "적용 가능" : "미적용"} · {provider}</strong><span className="mt-1 block">{evidence.buff.label}</span><small className="mt-1 block opacity-80">{evidence.available ? evidence.buff.condition : `${provider}을(를) 편성하면 조건을 확인할 수 있습니다.`}</small></li>; })}</ul>}
+      </div>
+    </section>
+
+    {partyBuffEvidence.some((evidence) => evidence.available) && <p className="mx-auto max-w-7xl px-5 pb-3 text-xs text-zinc-400 sm:px-8">편성이 충족된 버프도 아래의 조건 체크를 켜야 최종 스탯에 반영됩니다. 현재 반영 중인 파티 버프: <strong className="text-emerald-200">{partyBuffEvidence.filter((evidence) => evidence.available && activeBuffIds.includes(evidence.buff.id)).map((evidence) => evidence.buff.label).join(", ") || "없음"}</strong></p>}
 
     <div className="mx-auto max-w-7xl px-5 sm:px-8">
       <div className="mb-8 flex flex-col justify-between gap-4 border-b border-white/10 pb-7 sm:flex-row sm:items-end">

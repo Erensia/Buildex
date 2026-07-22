@@ -4,7 +4,7 @@ import { ZANI_S0_GRADE_REQUIREMENTS } from "./zani-phoebe-verina";
 import { calculateBuildStats, evaluateBuildGrade } from "./build-calculator";
 
 const baselineBuild = {
-  character: { id: "changli", label: "장리", stats: { baseAttack: 1000, critRate: 5, critDamage: 150, energyRegen: 100 } },
+  character: { id: "changli", label: "장리", stats: { baseAttack: 1000 } },
   weapon: { id: "blazing-brilliance", label: "솟아오르는 화염", stats: { baseAttack: 500, critRate: 24.3 } },
   echoes: [{ id: "echoes", label: "에코", stats: { attackPercent: 60, flatAttack: 200, critRate: 50, critDamage: 120, energyRegen: 30, fusionDamageBonus: 60, spectroDamageBonus: 60 } }],
 };
@@ -14,6 +14,16 @@ describe("calculateBuildStats", () => {
     const result = calculateBuildStats(baselineBuild);
 
     expect(result).toMatchObject({ attack: 2600, critRate: 79.3, critDamage: 270, energyRegen: 130, fusionDamageBonus: 60, spectroDamageBonus: 60 });
+  });
+
+  it("adds the universal starting stats when Echo substats are present", () => {
+    const result = calculateBuildStats({
+      character: { id: "character", label: "Character", stats: { baseAttack: 500 } },
+      weapon: { id: "weapon", label: "Weapon", stats: { baseAttack: 500, critDamage: 48.6 } },
+      echoes: [{ id: "echoes", label: "Echoes", stats: { critRate: 47.5, critDamage: 103.8, energyRegen: 24.8 } }],
+    });
+
+    expect(result).toMatchObject({ critRate: 52.5, critDamage: 302.4, energyRegen: 124.8 });
   });
 
   it("only applies party buffs whose conditions were confirmed", () => {

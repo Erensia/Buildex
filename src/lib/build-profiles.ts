@@ -2,7 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
-import { buildProfiles, characters, echoes, echoSetEchoes, echoSets, echoMainStats, users, weapons } from "@/lib/db/schema";
+import { buildProfiles, characters, echoes, echoSetEchoes, echoSets, echoMainStats, partyBuffs, users, weapons } from "@/lib/db/schema";
 import { getPublicRelease } from "@/lib/game-data-releases";
 import type { BuildInput } from "@/lib/validation/build";
 
@@ -32,27 +32,31 @@ export async function getBuildProfilesForUser(userId: string) {
   });
 }
 
-export async function getBuildReferences(characterKey: string, weaponKey: string, setKeys: string[] = [], echoKeys: string[] = [], releaseId?: string | null) {
+export async function getBuildReferences(characterKey: string, weaponKey: string, setKeys: string[] = [], echoKeys: string[] = [], releaseId?: string | null, partyMemberKeys: string[] = []) {
   const db = getDb();
   const current = await getPublicRelease(releaseId ?? undefined);
-  if (!current) return { release: null, character: undefined, weapon: undefined, sets: [], selectedEchoes: [], memberships: [], mainStats: [] };
+  if (!current) return { release: null, character: undefined, weapon: undefined, partyMembers: [], partyBuffs: [], sets: [], selectedEchoes: [], memberships: [], mainStats: [] };
   const targetReleaseId = current.release.id;
   const character = await db.query.characters.findFirst({ where: and(eq(characters.releaseId, targetReleaseId), eq(characters.externalKey, characterKey)) });
   const weapon = await db.query.weapons.findFirst({ where: and(eq(weapons.releaseId, targetReleaseId), eq(weapons.externalKey, weaponKey)) });
+  const partyMembers = partyMemberKeys.length ? await db.query.characters.findMany({ where: and(eq(characters.releaseId, targetReleaseId), inArray(characters.externalKey, partyMemberKeys)) }) : [];
+  const partyBuffDefinitions = await db.query.partyBuffs.findMany({ where: eq(partyBuffs.releaseId, targetReleaseId) });
   const sets = setKeys.length ? await db.query.echoSets.findMany({ where: and(eq(echoSets.releaseId, targetReleaseId), inArray(echoSets.externalKey, setKeys)) }) : [];
   const selectedEchoes = echoKeys.length ? await db.query.echoes.findMany({ where: and(eq(echoes.releaseId, targetReleaseId), inArray(echoes.externalKey, echoKeys)) }) : [];
   const memberships = selectedEchoes.length && sets.length
     ? await db.select().from(echoSetEchoes).where(and(inArray(echoSetEchoes.echoId, selectedEchoes.map((echo) => echo.id)), inArray(echoSetEchoes.echoSetId, sets.map((set) => set.id))))
     : [];
   const mainStats = await db.query.echoMainStats.findMany({ where: eq(echoMainStats.releaseId, targetReleaseId) });
-  return { release: current.release, character, weapon, sets, selectedEchoes, memberships, mainStats };
+  return { release: current.release, character, weapon, partyMembers, partyBuffs: partyBuffDefinitions, sets, selectedEchoes, memberships, mainStats };
 }
 
 export function validateBuildReferences(input: BuildInput, references: Awaited<ReturnType<typeof getBuildReferences>>) {
-  const { character, weapon, sets, selectedEchoes, memberships, mainStats } = references;
+  const { character, weapon, partyMembers, sets, selectedEchoes, memberships, mainStats } = references;
   if (!character || !weapon) return "Selected character or weapon was not found.";
   const weaponType = (character.baseStats as { weaponType?: string }).weaponType;
   if (weaponType && weapon.weaponType !== weaponType) return "The selected weapon is not compatible with this character.";
+  const uniquePartyMemberKeys = new Set(input.partyMemberKeys);
+  if (uniquePartyMemberKeys.size !== input.partyMemberKeys.length || uniquePartyMemberKeys.has(input.characterKey) || partyMembers.length !== uniquePartyMemberKeys.size) return "The selected party members are not valid for this build.";
   if (sets.length !== new Set(input.echoes.map((echo) => echo.setKey)).size) return "One or more selected echo sets were not found.";
   if (selectedEchoes.length !== new Set(input.echoes.map((echo) => echo.echoKey)).size) return "One or more selected echoes were not found.";
   for (const echo of input.echoes) {
