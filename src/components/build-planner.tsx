@@ -28,7 +28,7 @@ type SavedProfile = { id: string; name: string; dataReleaseId: string | null; da
 const slots: { slot: number; cost: 1 | 3 | 4 }[] = [{ slot: 1, cost: 4 }, { slot: 2, cost: 3 }, { slot: 3, cost: 3 }, { slot: 4, cost: 1 }, { slot: 5, cost: 1 }];
 const statLabels: Record<StatKey, string> = { baseAttack: "기초 공격력", flatAttack: "공격력", attackPercent: "공격력 %", flatHealth: "HP", healthPercent: "HP %", flatDefense: "방어력", defensePercent: "방어력 %", critRate: "치명타 확률", critDamage: "치명타 피해", energyRegen: "공명 효율", fusionDamageBonus: "용융 피해 보너스", spectroDamageBonus: "회절 피해 보너스", glacioDamageBonus: "응결 피해 보너스", basicAttackDamageBonus: "일반 공격 피해 보너스", heavyAttackDamageBonus: "강공격 피해 보너스", resonanceSkillDamageBonus: "공명 스킬 피해 보너스", resonanceLiberationDamageBonus: "공명 해방 피해 보너스" };
 const trackedStats = Object.keys(echoSubstatRolls) as (keyof typeof echoSubstatRolls)[];
-const inputClass = "mt-2 w-full rounded-xl border border-white/8 bg-zinc-950/80 px-3 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/15";
+const inputClass = "mt-2 w-full rounded-xl border border-transparent bg-[#0f0c15] px-3 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/15";
 
 function format(value: number) { return Number.isInteger(value) ? String(value) : value.toFixed(1); }
 const percentStats = new Set<string>(["attackPercent", "healthPercent", "defensePercent", "critRate", "critDamage", "energyRegen", "fusionDamageBonus", "spectroDamageBonus", "glacioDamageBonus", "basicAttackDamageBonus", "heavyAttackDamageBonus", "resonanceSkillDamageBonus", "resonanceLiberationDamageBonus"]);
@@ -104,6 +104,23 @@ export function BuildPlanner({ userName }: { userName: string }) {
   const comparisonProfile = profiles.find((profile) => profile.id === comparisonProfileId);
   const improvementActions = calculation?.grade ? getImprovementActions(calculation.grade.unmetRequirements, slots.map((slot, index) => ({ ...slot, mainStat: mainStats[index] ?? "" })), data?.mainStats ?? []) : [];
 
+  function animatePageScroll(target: number) {
+    const start = window.scrollY;
+    const distance = target - start;
+    if (!distance) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { window.scrollTo({ top: target }); return; }
+    const duration = Math.min(850, Math.max(450, Math.abs(distance) * 0.18));
+    const startedAt = performance.now();
+    const easeInOutCubic = (progress: number) => progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+    const frame = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      window.scrollTo({ top: start + distance * easeInOutCubic(progress) });
+      if (progress < 1) window.requestAnimationFrame(frame);
+    };
+    window.requestAnimationFrame(frame);
+  }
+
+  function payload(): BuildInput { return { name, characterKey, weaponKey: weaponKey || weapon?.externalKey || "", echoes: slots.map((slot, index) => ({ slot: slot.slot, echoKey: echoKeys[index], setKey: setKeys[index] ?? "", cost: slot.cost, mainStat: mainStats[index], subStats: Object.entries(subStats[index] ?? {}).map(([key, value]) => ({ key, value: value ?? 0 })) })), activeBuffIds, formulaVersion: FORMULA_VERSION }; }
   function payload(): BuildInput { return { name, characterKey, weaponKey: weaponKey || weapon?.externalKey || "", echoes: slots.map((slot, index) => ({ slot: slot.slot, echoKey: echoKeys[index], setKey: setKeys[index] ?? "", cost: slot.cost, mainStat: mainStats[index], subStats: Object.entries(subStats[index] ?? {}).map(([key, value]) => ({ key, value: value ?? 0 })) })), activeBuffIds: activeBuffIds.filter((id) => buffs.some((buff) => buff.id === id)), partyMemberKeys: selectedPartyMemberKeys, formulaVersion: FORMULA_VERSION }; }
   async function save() { setSaving(true); setMessage(undefined); const response = await fetch(profileId ? `/api/build-profiles/${profileId}` : "/api/build-profiles", { method: profileId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()) }); const body = await response.json().catch(() => null); if (!response.ok) setMessage(body?.error ?? "빌드를 저장하지 못했습니다."); else { setProfiles((current) => profileId ? current.map((item) => item.id === body.id ? body : item) : [body, ...current]); setProfileId(body.id); setMessage("빌드를 저장했습니다."); } setSaving(false); }
   function applyInput(input: BuildInput) { setName(input.name); setCharacterKey(input.characterKey); setWeaponKey(input.weaponKey); setSetKeys(input.echoes.map((echo) => echo.setKey)); setEchoKeys(input.echoes.map((echo) => echo.echoKey ?? "")); setMainStats(input.echoes.map((echo) => echo.mainStat)); setSubStats(input.echoes.map((echo) => Object.fromEntries(echo.subStats.map((stat) => [stat.key, stat.value])) as StatValues)); setActiveBuffIds(input.activeBuffIds); setPartyMemberKeys(input.partyMemberKeys ?? []); }
@@ -116,7 +133,7 @@ export function BuildPlanner({ userName }: { userName: string }) {
   const game = data.games[0];
   const statCards = [["CRIT Rate", calculation?.result.critRate ?? 0], ["CRIT DMG", calculation?.result.critDamage ?? 0], ["Energy Regen", calculation?.result.energyRegen ?? 0], ["Fusion DMG", calculation?.result.fusionDamageBonus ?? 0], ["Spectro DMG", calculation?.result.spectroDamageBonus ?? 0], ["Glacio DMG", calculation?.result.glacioDamageBonus ?? 0]] as const;
 
-  return <main className="min-h-screen bg-[radial-gradient(circle_at_85%_0%,rgba(124,58,237,.16),transparent_30rem),#09090b] pb-16 text-zinc-100">
+  return <main className="build-planner min-h-screen bg-[#09070d] pb-16 text-zinc-100">
     <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
       <Link className="text-lg font-black tracking-tight text-white" href="/">BUILDEX<span className="text-violet-400">.</span></Link>
       <div className="flex items-center gap-3 text-sm"><span className="hidden text-zinc-400 sm:block">{userName}</span><button className="rounded-lg border border-white/10 px-3 py-1.5 text-zinc-300 transition hover:border-white/25 hover:text-white" onClick={() => signOut({ callbackUrl: "/" })}>로그아웃</button></div>
@@ -159,5 +176,13 @@ export function BuildPlanner({ userName }: { userName: string }) {
         </aside>
       </div>
     </div>
+    <nav aria-label="페이지 이동" className="fixed bottom-5 right-5 z-20 flex flex-col gap-2 sm:bottom-7 sm:right-7">
+      <button aria-label="페이지 맨 위로 이동" className="build-scroll-control" onClick={() => animatePageScroll(0)} title="맨 위로 이동">
+        <span aria-hidden="true">↑</span>
+      </button>
+      <button aria-label="페이지 맨 아래로 이동" className="build-scroll-control" onClick={() => animatePageScroll(document.documentElement.scrollHeight - window.innerHeight)} title="맨 아래로 이동">
+        <span aria-hidden="true">↓</span>
+      </button>
+    </nav>
   </main>;
 }

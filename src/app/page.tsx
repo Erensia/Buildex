@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="neumorphic-app min-h-screen bg-[#09070d] text-zinc-100">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <span className="text-xl font-black tracking-tight">BUILDEX</span>
         <nav className="flex items-center gap-5 text-sm text-zinc-400">
