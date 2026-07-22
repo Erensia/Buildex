@@ -57,6 +57,48 @@
       "when": 1784361600000,
       "tag": "0007_one_published_release_per_game",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784730000000,
+      "tag": "0008_correct_character_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784730001000,
+      "tag": "0009_repair_character_role_encoding",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784730002000,
+      "tag": "0010_correct_dealer_role_typo",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784730003000,
+      "tag": "0011_fix_lucilla_and_add_augment",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784730004000,
+      "tag": "0012_normalize_weapon_main_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784730005000,
+      "tag": "0013_add_build_favorites_and_party_profiles",
+      "breakpoints": true
     }
   ]
 }

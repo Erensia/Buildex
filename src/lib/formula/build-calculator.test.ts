@@ -4,7 +4,7 @@ import { ZANI_S0_GRADE_REQUIREMENTS } from "./zani-phoebe-verina";
 import { calculateBuildStats, evaluateBuildGrade } from "./build-calculator";
 
 const baselineBuild = {
-  character: { id: "changli", label: "장리", stats: { baseAttack: 1000, critRate: 5, critDamage: 150, energyRegen: 100 } },
+  character: { id: "changli", label: "장리", stats: { baseAttack: 1000 } },
   weapon: { id: "blazing-brilliance", label: "솟아오르는 화염", stats: { baseAttack: 500, critRate: 24.3 } },
   echoes: [{ id: "echoes", label: "에코", stats: { attackPercent: 60, flatAttack: 200, critRate: 50, critDamage: 120, energyRegen: 30, fusionDamageBonus: 60, spectroDamageBonus: 60 } }],
 };
@@ -22,6 +22,16 @@ describe("calculateBuildStats", () => {
 
     expect(withoutBuff.fusionDamageBonus).toBe(60);
     expect(withBuff).toMatchObject({ fusionDamageBonus: 95, resonanceSkillDamageBonus: 25 });
+  });
+
+  it("adds Echo substats to the global critical and energy defaults", () => {
+    const result = calculateBuildStats({
+      character: { id: "character", label: "Character", stats: { baseAttack: 100 } },
+      weapon: { id: "weapon", label: "Weapon", stats: {} },
+      echoes: [{ id: "echo", label: "Echo", stats: { critRate: 22, critDamage: 48.6, energyRegen: 12.4 } }],
+    });
+
+    expect(result).toMatchObject({ critRate: 27, critDamage: 198.6, energyRegen: 112.4 });
   });
 });
 

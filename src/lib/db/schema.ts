@@ -132,3 +132,17 @@ export const buildProfiles = pgTable("build_profiles", {
   formulaVersion: varchar("formula_version", { length: 32 }).notNull(),
   ...timestamps,
 });
+
+export const buildFavorites = pgTable("build_favorites", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  buildProfileId: uuid("build_profile_id").notNull().references(() => buildProfiles.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [primaryKey({ columns: [table.userId, table.buildProfileId] })]);
+
+export const partyProfiles = pgTable("party_profiles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 80 }).notNull(),
+  memberBuildIds: jsonb("member_build_ids").notNull(),
+  ...timestamps,
+});
