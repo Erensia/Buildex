@@ -2,6 +2,11 @@
   "name": "buildex",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.13.1",
+  "engines": {
+    "node": ">=20.9.0 <25",
+    "pnpm": ">=11.13.1 <12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
