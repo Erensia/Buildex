@@ -60,6 +60,15 @@ body {
   box-shadow: inset 4px 4px 10px rgb(0 0 0 / 0.55), inset -3px -3px 8px rgb(126 82 184 / 0.08);
 }
 
+.neumorphic-admin select {
+  color-scheme: dark;
+}
+
+.neumorphic-admin select option {
+  background-color: #100c18;
+  color: #f4f1ff;
+}
+
 .neumorphic-auth input:focus,
 .neumorphic-admin select:focus,
 .neumorphic-admin textarea:focus {
