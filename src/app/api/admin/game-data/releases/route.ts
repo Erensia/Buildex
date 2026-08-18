@@ -4,6 +4,7 @@ import { getCurrentAdmin } from "@/lib/admin";
 import { getDb } from "@/lib/db/client";
 import { characters, echoMainStats, echoes, echoSetEchoes, echoSets, gameDataReleases, games, partyBuffs, weapons } from "@/lib/db/schema";
 import { diffReleaseRows } from "@/lib/game-data/release-diff";
+import { getCurrentPublishedRelease } from "@/lib/game-data-releases";
 import { SUPPORTED_STAT_KEYS } from "@/lib/formula/stats";
 import { releaseActionSchema } from "@/lib/validation/game-data";
 
@@ -116,14 +117,33 @@ export async function POST(request: Request) {
         const [published] = await tx.update(gameDataReleases).set({ status: "published", publishedAt: new Date() }).where(and(eq(gameDataReleases.id, validation.release!.id), eq(gameDataReleases.status, "draft"))).returning({ id: gameDataReleases.id });
         if (!published) throw new Error("릴리스 상태가 변경되어 발행할 수 없습니다.");
         await tx.update(games).set({ currentDataReleaseId: validation.release!.id, currentDataVersion: validation.release!.version, sourceSnapshot: validation.release!.sourceSnapshot, updatedAt: new Date() }).where(eq(games.id, validation.release!.gameId));
-        const [smokeGame] = await tx.select({ currentDataReleaseId: games.currentDataReleaseId }).from(games).where(eq(games.id, validation.release!.gameId));
-        const [smokeRelease] = await tx.select({ status: gameDataReleases.status }).from(gameDataReleases).where(eq(gameDataReleases.id, validation.release!.id));
-        if (smokeGame?.currentDataReleaseId !== validation.release!.id || smokeRelease?.status !== "published") throw new Error("발행 후 공개 릴리스 스모크 검증에 실패했습니다.");
+        // Re-read inside the transaction as a same-connection consistency guard before commit.
+        const [txGame] = await tx.select({ currentDataReleaseId: games.currentDataReleaseId }).from(games).where(eq(games.id, validation.release!.gameId));
+        const [txRelease] = await tx.select({ status: gameDataReleases.status }).from(gameDataReleases).where(eq(gameDataReleases.id, validation.release!.id));
+        if (txGame?.currentDataReleaseId !== validation.release!.id || txRelease?.status !== "published") throw new Error("발행 트랜잭션 내부 일관성 검증에 실패했습니다.");
       });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "다른 발행 작업과 충돌했습니다. 다시 시도해 주세요." }, { status: 409 });
     }
-    return NextResponse.json({ ok: true, smoke: { passed: true, releaseId: validation.release.id } });
+
+    // Post-commit smoke test: exercise the same lookup the public routes (`/characters`, `/api/build-data`)
+    // use, so a bug in that shared query path is caught right after publish instead of by a user report.
+    const published = await getCurrentPublishedRelease();
+    const smokePassed = published?.release.id === validation.release.id;
+    let smokeCounts: { characters: number; weapons: number; echoes: number } | null = null;
+    if (smokePassed) {
+      const [characterRows, weaponRows, echoRows] = await Promise.all([
+        db.query.characters.findMany({ where: eq(characters.releaseId, published.release.id), columns: { id: true } }),
+        db.query.weapons.findMany({ where: eq(weapons.releaseId, published.release.id), columns: { id: true } }),
+        db.query.echoes.findMany({ where: eq(echoes.releaseId, published.release.id), columns: { id: true } }),
+      ]);
+      smokeCounts = { characters: characterRows.length, weapons: weaponRows.length, echoes: echoRows.length };
+    }
+    const smokeOk = smokePassed && !!smokeCounts && smokeCounts.characters > 0 && smokeCounts.weapons > 0 && smokeCounts.echoes > 0;
+    if (!smokeOk) {
+      return NextResponse.json({ ok: true, smoke: { passed: false, releaseId: validation.release.id }, warning: "릴리스는 발행되었지만 공개 API 스모크 검증에 실패했습니다. 공개 화면 데이터를 즉시 확인해 주세요." }, { status: 200 });
+    }
+    return NextResponse.json({ ok: true, smoke: { passed: true, releaseId: validation.release.id, counts: smokeCounts } });
   }
 
   const game = await db.query.games.findFirst({ where: eq(games.slug, parsed.data.gameSlug) });

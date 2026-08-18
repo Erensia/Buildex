@@ -1,5 +1,12 @@
 # Buildex 개발 로그
 
+## 2026-08-18 — 릴리스 발행 스모크 테스트 실화 및 마이그레이션 번호 정정
+
+- 릴리스 발행 API의 "스모크 검증"이 트랜잭션 내부에서 같은 테이블을 raw select로 재확인하는 수준이라, 공개 라우트(`/characters`, `/api/build-data`)가 실제로 사용하는 조회 함수(`getCurrentPublishedRelease`)의 결함은 잡지 못하던 문제를 정정했다. 발행 트랜잭션이 커밋된 뒤 해당 함수를 직접 호출하고, 캐릭터·무기·에코 행이 실제로 조회되는지까지 확인한다. 스모크 검증이 실패해도 이미 커밋된 발행 자체는 되돌리지 않고, 응답에 `warning`을 담아 관리자가 즉시 공개 화면을 점검하도록 안내한다.
+- 트랜잭션 내부의 기존 재확인 로직은 그대로 유지하되, 발행 후 공개 API 스모크 검증과 역할이 겹치지 않도록 "트랜잭션 내부 일관성 검증"으로 목적을 명확히 했다.
+- `drizzle/0008_party_buffs.sql`이 `0008_correct_character_roles.sql`과 번호가 중복되어 있었다. 저널(`_journal.json`)의 적용 순서(idx 13~16)에 맞춰 `0013_party_buffs`, `0014_add_build_favorites_and_party_profiles`, `0015_expand_element_parties`, `0016_normalize_chisa_base_stats`로 파일명과 저널 태그를 함께 재정렬했다. 마이그레이션 적용은 파일 내용의 해시로 추적되므로 이미 적용된 환경에는 영향이 없으며, 로컬 DB에 `pnpm db:migrate`로 재적용해 무결성을 확인했다.
+- `pnpm lint`, `pnpm test`(25개), `pnpm build`를 통과했다.
+
 ## 2026-07-22 — 회원 빌드 즐겨찾기와 3인 파티 구성
 
 - 저장 빌드를 즐겨찾기에 등록하고, 본인이 소유한 세 개의 저장 빌드를 3인 파티 슬롯에 배치·저장하는 회원 전용 기능을 추가했다.
