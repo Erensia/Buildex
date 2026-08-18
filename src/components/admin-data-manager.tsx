@@ -102,7 +102,10 @@ export function AdminDataManager({ adminName }: { adminName: string }) {
     if (!confirm(`${release.version}을 공개합니다. 이전 공개 릴리스는 보존되지만 더 이상 플래너에 노출되지 않습니다.`)) return;
     const response = await fetch("/api/admin/game-data/releases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "publish", releaseId: release.id }) });
     const result = await response.json(); if (!response.ok) { setMessage(result.error ?? "발행하지 못했습니다."); return; }
-    await loadReleases(); setMessage(`${release.version}을 공개했습니다. 공개 포인터 스모크 검증도 통과했습니다.`);
+    await loadReleases();
+    setMessage(result.smoke?.passed
+      ? `${release.version}을 공개했습니다. 공개 API 스모크 검증도 통과했습니다.`
+      : `${release.version}을 공개했지만 ${result.warning ?? "공개 API 스모크 검증에 실패했습니다. 공개 화면 데이터를 직접 확인해 주세요."}`);
   }
   async function loadDiff() {
     if (!release || !editable) return;
