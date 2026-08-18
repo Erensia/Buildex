@@ -1,5 +1,12 @@
 # Buildex 개발 로그
 
+## 2026-08-18 — 통합 테스트 인프라 및 확장 캐릭터 회귀 테스트
+
+- `pnpm test`(DB 불필요 단위 테스트)와 분리된 `pnpm test:integration`을 추가했다. `vitest.integration.config.ts`가 `src/**/*.integration.test.ts`만 대상으로 하고, `TEST_DATABASE_URL`을 `DATABASE_URL`로 주입해 실제 Postgres에 붙는다.
+- `TEST_DATABASE_URL`이 가리키는 별도 데이터베이스를 만들고(`pnpm db:test:create`) 동일한 마이그레이션을 적용하는(`pnpm db:test:migrate`, `drizzle.test.config.ts`) 스크립트를 추가했다. 개발 DB와 같은 마이그레이션을 적용하므로 3.5.1 시드 데이터가 그대로 재현되어, 손으로 만든 픽스처 대신 실제 발행 데이터로 검증한다.
+- `src/lib/game-data/released-characters.integration.test.ts`를 추가해, 3.5.1 캐릭터 확대에서 추가된 11명(기염·모르테피·벨리나·유노·감심·상리요·음림·카멜리아·로코코·파수인·양양·현령) 각각에 대해 (1) 공개 릴리스 조회 시 호환 무기가 존재하는지, (2) 최소 구성 빌드 입력이 스키마 검증과 서버 참조 검증(`getBuildReferences`/`validateBuildReferences`, `/api/build-profiles`가 실제로 쓰는 함수)을 모두 통과하는지 자동으로 확인한다. `next-phase-plan.md` 1절의 "각 추가 캐릭터에 대해 공개 조회와 빌드 입력 검증을 자동 테스트한다" 완료 기준을 충족한다.
+- `pnpm lint`, `pnpm test`(기존 25개, 영향 없음), `pnpm test:integration`(신규 23개), `pnpm build`를 통과했다.
+
 ## 2026-08-18 — 릴리스 발행 스모크 테스트 실화 및 마이그레이션 번호 정정
 
 - 릴리스 발행 API의 "스모크 검증"이 트랜잭션 내부에서 같은 테이블을 raw select로 재확인하는 수준이라, 공개 라우트(`/characters`, `/api/build-data`)가 실제로 사용하는 조회 함수(`getCurrentPublishedRelease`)의 결함은 잡지 못하던 문제를 정정했다. 발행 트랜잭션이 커밋된 뒤 해당 함수를 직접 호출하고, 캐릭터·무기·에코 행이 실제로 조회되는지까지 확인한다. 스모크 검증이 실패해도 이미 커밋된 발행 자체는 되돌리지 않고, 응답에 `warning`을 담아 관리자가 즉시 공개 화면을 점검하도록 안내한다.

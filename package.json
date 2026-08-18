@@ -14,8 +14,12 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:setup": "pnpm db:test:create && pnpm db:test:migrate",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:test:create": "node scripts/create-test-database.mjs",
+    "db:test:migrate": "drizzle-kit migrate --config drizzle.test.config.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
