@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Placeholder values only — CI never talks to a real auth provider or
+# production database. Real deployments set their own secrets (see
+# docs/docker-deployment.md and docker.env.example).
+env:
+  NEXTAUTH_SECRET: ci-placeholder-secret-not-used-for-real-auth
+  NEXTAUTH_URL: http://localhost:3000
+  ADMIN_EMAIL: admin@example.com
+
+jobs:
+  lint-test-build:
+    name: Lint, unit test, build
+    runs-on: ubuntu-latest
+    env:
+      # No DB runs in this job. All routes that read game/build data are
+      # dynamic (server-rendered on demand), so `next build` never queries
+      # this URL — it only needs to be a syntactically valid connection string.
+      DATABASE_URL: postgres://buildex:buildex@localhost:5432/buildex
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm test
+
+      - run: pnpm build
+
+  integration-test:
+    name: DB integration test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: buildex_test
+          POSTGRES_USER: buildex
+          POSTGRES_PASSWORD: buildex
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U buildex -d buildex_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The postgres service above already creates buildex_test, so this
+      # job only needs to apply migrations (pnpm db:test:create is for
+      # local dev, where the database doesn't exist yet).
+      TEST_DATABASE_URL: postgres://buildex:buildex@localhost:5432/buildex_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm db:test:migrate
+
+      - run: pnpm test:integration

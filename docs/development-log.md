@@ -1,5 +1,12 @@
 # Buildex 개발 로그
 
+## 2026-08-18 — GitHub Actions CI 파이프라인 추가
+
+- `.github/workflows/ci.yml`을 추가했다. `main` 브랜치와 모든 PR에서 `lint-test-build`(lint → 단위 테스트 → build)와 `integration-test`(Postgres 서비스 컨테이너 기동 → 마이그레이션 → 통합 테스트) 두 잡을 병렬로 실행한다.
+- `next build`는 게임/빌드 데이터를 읽는 모든 라우트가 동적 렌더링이라 빌드 시점에 DB를 조회하지 않는다는 점을 로컬에서 postgres를 중지한 채로 확인한 뒤, `lint-test-build` 잡에는 DB 서비스 없이 형식만 유효한 `DATABASE_URL`만 제공하도록 구성했다.
+- `integration-test` 잡은 서비스 컨테이너가 `buildex_test` 데이터베이스를 이미 만들어주므로 `pnpm db:test:create` 없이 `pnpm db:test:migrate`만 실행한다.
+- MVP 관점에서 기능 체크리스트는 완성됐지만 자동화된 신뢰성 검증이 없다는 점이 다음 단계의 과제였는데, 이 파이프라인으로 그 공백을 메웠다.
+
 ## 2026-08-18 — 통합 테스트 인프라 및 확장 캐릭터 회귀 테스트
 
 - `pnpm test`(DB 불필요 단위 테스트)와 분리된 `pnpm test:integration`을 추가했다. `vitest.integration.config.ts`가 `src/**/*.integration.test.ts`만 대상으로 하고, `TEST_DATABASE_URL`을 `DATABASE_URL`로 주입해 실제 Postgres에 붙는다.
