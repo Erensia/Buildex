@@ -1,5 +1,12 @@
 # Buildex 개발 로그
 
+## 2026-08-18 — admin 릴리스 라우트 구조 정리 (Controller/Service 분리)
+
+- `src/app/api/admin/game-data/releases/route.ts`(180줄)에 있던 `validateRelease`, `getReleaseDiff`, 발행 트랜잭션·스모크 검증, 초안 복제 로직을 `src/lib/game-data/release-management.ts`로 옮겼다. 다른 라우트(`build-profiles`가 `build-profiles.ts`에, `release-diff` 계산이 `release-diff.ts`에 위임하는 것)와 같은 패턴으로 맞췄다.
+- route.ts는 이제 인증 확인, 입력 파싱, `lib` 함수 호출 결과를 HTTP 응답으로 변환하는 역할만 한다(180줄 → 40줄). 동작 변경 없는 순수 구조 정리다.
+- `publishRelease`는 이제 `{ status, body }`를 반환해 라우트가 상태 코드 매핑만 담당하도록 했고, `cloneReleaseFromPublished`도 같은 방식으로 분리했다.
+- `pnpm lint`, `pnpm test`(25개), `pnpm test:integration`(23개), `pnpm build`를 통과했다.
+
 ## 2026-08-18 — GitHub Actions CI 파이프라인 추가
 
 - `.github/workflows/ci.yml`을 추가했다. `main` 브랜치와 모든 PR에서 `lint-test-build`(lint → 단위 테스트 → build)와 `integration-test`(Postgres 서비스 컨테이너 기동 → 마이그레이션 → 통합 테스트) 두 잡을 병렬로 실행한다.
