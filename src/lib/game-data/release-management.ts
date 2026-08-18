@@ -12,16 +12,28 @@ import { getCurrentPublishedRelease } from "@/lib/game-data-releases";
 import { diffReleaseRows } from "@/lib/game-data/release-diff";
 
 const supportedStatKeys = new Set<string>(SUPPORTED_STAT_KEYS);
-const metadataStatKeys = new Set(["level", "refinement"]);
+// Numeric metadata: same "must be a finite number" rule as real stat keys.
+const numericMetadataKeys = new Set(["level", "refinement"]);
+// Opaque metadata: known non-stat fields that legitimately hold non-numeric
+// JSON (arrays/strings), so they're exempt from the numeric check entirely.
+// weapons.stats.conditionalEffects describes a signature-weapon buff that
+// getPersonalBuffs (src/lib/formula/party-buffs.ts) currently reads from a
+// hardcoded table rather than this field; echoes.stats.recommendedFor is an
+// editorial hint shown nowhere yet. Neither drives calculations today.
+const opaqueWeaponMetadataKeys = new Set(["conditionalEffects"]);
+const opaqueEchoMetadataKeys = new Set(["recommendedFor"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function hasInvalidStatValues(value: unknown, allowMetadata = false) {
+function hasInvalidStatValues(value: unknown, options: { numericMetadata?: boolean; opaqueMetadataKeys?: Set<string> } = {}) {
   if (!isRecord(value)) return true;
-  return Object.entries(value).some(([key, statValue]) =>
-    !(supportedStatKeys.has(key) || (allowMetadata && metadataStatKeys.has(key))) || typeof statValue !== "number" || !Number.isFinite(statValue));
+  return Object.entries(value).some(([key, statValue]) => {
+    if (options.opaqueMetadataKeys?.has(key)) return false;
+    if (!(supportedStatKeys.has(key) || (options.numericMetadata && numericMetadataKeys.has(key)))) return true;
+    return typeof statValue !== "number" || !Number.isFinite(statValue);
+  });
 }
 
 export async function getReleaseDiff(releaseId: string) {
@@ -68,7 +80,7 @@ export async function validateRelease(releaseId: string) {
   if (!echoRows.length || !setRows.length || !mainStatRows.length) errors.push("에코·에코 세트·주옵션 데이터를 모두 등록해야 합니다.");
   if (!Array.isArray(release.sourceManifest) || !release.sourceManifest.length) errors.push("릴리스 출처가 한 개 이상 필요합니다.");
   if (characterRows.some((character) => !isRecord(character.baseStats) || typeof character.baseStats.baseAttack !== "number" || !Number.isFinite(character.baseStats.baseAttack) || character.baseStats.baseAttack < 0 || typeof character.baseStats.weaponType !== "string" || !character.baseStats.weaponType || typeof character.baseStats.element !== "string" || !character.baseStats.element)) errors.push("모든 캐릭터에는 유효한 기초 공격력·속성·무기 타입이 필요합니다.");
-  if (weaponRows.some((weapon) => hasInvalidStatValues(weapon.stats, true)) || echoRows.some((echo) => hasInvalidStatValues(echo.stats))) errors.push("무기·에코 스탯에는 지원되는 유한한 숫자 키만 사용할 수 있습니다.");
+  if (weaponRows.some((weapon) => hasInvalidStatValues(weapon.stats, { numericMetadata: true, opaqueMetadataKeys: opaqueWeaponMetadataKeys })) || echoRows.some((echo) => hasInvalidStatValues(echo.stats, { opaqueMetadataKeys: opaqueEchoMetadataKeys }))) errors.push("무기·에코 스탯에는 지원되는 유한한 숫자 키만 사용할 수 있습니다.");
   if (partyBuffRows.some((buff) => !characterRows.some((character) => character.externalKey === buff.targetCharacterKey) || !characterRows.some((character) => character.externalKey === buff.providerCharacterKey))) errors.push("파티 버프의 대상 또는 제공 캐릭터가 이 릴리스에 없습니다.");
   if (partyBuffRows.some((buff) => hasInvalidStatValues(buff.stats))) errors.push("파티 버프에는 지원되는 유한한 숫자 스탯 키만 사용할 수 있습니다.");
   const mismatched = [...characterRows, ...weaponRows, ...echoRows, ...setRows, ...mainStatRows].some((row) => row.dataVersion && row.dataVersion !== release.version || row.sourceSnapshot !== release.sourceSnapshot);

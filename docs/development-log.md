@@ -1,5 +1,13 @@
 # Buildex 개발 로그
 
+## 2026-08-18 — release-management 통합 테스트 작성 중 발견한 데이터 결함 수정
+
+- `release-management.ts` 통합 테스트를 실제 발행 검증(`validateRelease`)으로 돌려보니, **현재 공개된 3.5.1 릴리스 자체가 자신의 발행 검증을 통과하지 못하는** 문제를 발견했다. 관리자가 지금 공개본을 그대로 복제해 재발행만 해도 막히는 상태였다.
+- 원인 1: 에코 46개(3.5·3.5.1 릴리스 각각)의 `stats` 컬럼이 빈 객체 `{}`가 아니라 문자열 `"{}"`로 저장되어 있었다. `Object.entries()`가 문자열의 각 글자를 순회해 `{"0":"{","1":"}"}`로 오검출됐다. `drizzle/0017_fix_echo_stats_string_literal.sql`로 두 릴리스 모두 수정했다(내용 손상이라 릴리스 무관하게 일괄 수정, 로컬 DB에도 재적용해 확인).
+- 원인 2: 무기 6개의 `conditionalEffects`, 에코 14개의 `recommendedFor` 키가 검증 대상 숫자 스탯 키 목록에 없어 거부되고 있었다. 코드 전체를 검색해 두 필드 모두 어디에서도 읽지 않는 것을 확인했다(`conditionalEffects`는 `getPersonalBuffs`의 하드코딩 값과 내용이 같아, 코드로 옮기려다 중단된 흔적으로 보인다). 사용자 확인 후 데이터는 유지하고, `hasInvalidStatValues`에 "불투명 메타데이터 키"(숫자 검증을 건너뛰는 키) 개념을 추가해 두 필드를 허용했다.
+- `src/lib/game-data/release-management.integration.test.ts`를 추가해 `validateRelease`·`getReleaseDiff`·`cloneReleaseFromPublished`·`publishRelease`를 HTTP 계층 없이 직접 검증한다. `publishRelease`의 성공 경로 테스트는 공개 릴리스를 임시 클론해 실제로 발행한 뒤, 게임당 발행 릴리스 1개 제약을 지키는 순서로 원래 상태를 복원한다.
+- `pnpm lint`, `pnpm test`(25개), `pnpm test:integration`(32개), `pnpm build`를 통과했다.
+
 ## 2026-08-18 — admin 릴리스 라우트 구조 정리 (Controller/Service 분리)
 
 - `src/app/api/admin/game-data/releases/route.ts`(180줄)에 있던 `validateRelease`, `getReleaseDiff`, 발행 트랜잭션·스모크 검증, 초안 복제 로직을 `src/lib/game-data/release-management.ts`로 옮겼다. 다른 라우트(`build-profiles`가 `build-profiles.ts`에, `release-diff` 계산이 `release-diff.ts`에 위임하는 것)와 같은 패턴으로 맞췄다.
