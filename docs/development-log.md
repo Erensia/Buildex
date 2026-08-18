@@ -1,5 +1,41 @@
 # Buildex 개발 로그
 
+## 2026-08-18 — release-management 통합 테스트 작성 중 발견한 데이터 결함 수정
+
+- `release-management.ts` 통합 테스트를 실제 발행 검증(`validateRelease`)으로 돌려보니, **현재 공개된 3.5.1 릴리스 자체가 자신의 발행 검증을 통과하지 못하는** 문제를 발견했다. 관리자가 지금 공개본을 그대로 복제해 재발행만 해도 막히는 상태였다.
+- 원인 1: 에코 46개(3.5·3.5.1 릴리스 각각)의 `stats` 컬럼이 빈 객체 `{}`가 아니라 문자열 `"{}"`로 저장되어 있었다. `Object.entries()`가 문자열의 각 글자를 순회해 `{"0":"{","1":"}"}`로 오검출됐다. `drizzle/0017_fix_echo_stats_string_literal.sql`로 두 릴리스 모두 수정했다(내용 손상이라 릴리스 무관하게 일괄 수정, 로컬 DB에도 재적용해 확인).
+- 원인 2: 무기 6개의 `conditionalEffects`, 에코 14개의 `recommendedFor` 키가 검증 대상 숫자 스탯 키 목록에 없어 거부되고 있었다. 코드 전체를 검색해 두 필드 모두 어디에서도 읽지 않는 것을 확인했다(`conditionalEffects`는 `getPersonalBuffs`의 하드코딩 값과 내용이 같아, 코드로 옮기려다 중단된 흔적으로 보인다). 사용자 확인 후 데이터는 유지하고, `hasInvalidStatValues`에 "불투명 메타데이터 키"(숫자 검증을 건너뛰는 키) 개념을 추가해 두 필드를 허용했다.
+- `src/lib/game-data/release-management.integration.test.ts`를 추가해 `validateRelease`·`getReleaseDiff`·`cloneReleaseFromPublished`·`publishRelease`를 HTTP 계층 없이 직접 검증한다. `publishRelease`의 성공 경로 테스트는 공개 릴리스를 임시 클론해 실제로 발행한 뒤, 게임당 발행 릴리스 1개 제약을 지키는 순서로 원래 상태를 복원한다.
+- `pnpm lint`, `pnpm test`(25개), `pnpm test:integration`(32개), `pnpm build`를 통과했다.
+
+## 2026-08-18 — admin 릴리스 라우트 구조 정리 (Controller/Service 분리)
+
+- `src/app/api/admin/game-data/releases/route.ts`(180줄)에 있던 `validateRelease`, `getReleaseDiff`, 발행 트랜잭션·스모크 검증, 초안 복제 로직을 `src/lib/game-data/release-management.ts`로 옮겼다. 다른 라우트(`build-profiles`가 `build-profiles.ts`에, `release-diff` 계산이 `release-diff.ts`에 위임하는 것)와 같은 패턴으로 맞췄다.
+- route.ts는 이제 인증 확인, 입력 파싱, `lib` 함수 호출 결과를 HTTP 응답으로 변환하는 역할만 한다(180줄 → 40줄). 동작 변경 없는 순수 구조 정리다.
+- `publishRelease`는 이제 `{ status, body }`를 반환해 라우트가 상태 코드 매핑만 담당하도록 했고, `cloneReleaseFromPublished`도 같은 방식으로 분리했다.
+- `pnpm lint`, `pnpm test`(25개), `pnpm test:integration`(23개), `pnpm build`를 통과했다.
+
+## 2026-08-18 — GitHub Actions CI 파이프라인 추가
+
+- `.github/workflows/ci.yml`을 추가했다. `main` 브랜치와 모든 PR에서 `lint-test-build`(lint → 단위 테스트 → build)와 `integration-test`(Postgres 서비스 컨테이너 기동 → 마이그레이션 → 통합 테스트) 두 잡을 병렬로 실행한다.
+- `next build`는 게임/빌드 데이터를 읽는 모든 라우트가 동적 렌더링이라 빌드 시점에 DB를 조회하지 않는다는 점을 로컬에서 postgres를 중지한 채로 확인한 뒤, `lint-test-build` 잡에는 DB 서비스 없이 형식만 유효한 `DATABASE_URL`만 제공하도록 구성했다.
+- `integration-test` 잡은 서비스 컨테이너가 `buildex_test` 데이터베이스를 이미 만들어주므로 `pnpm db:test:create` 없이 `pnpm db:test:migrate`만 실행한다.
+- MVP 관점에서 기능 체크리스트는 완성됐지만 자동화된 신뢰성 검증이 없다는 점이 다음 단계의 과제였는데, 이 파이프라인으로 그 공백을 메웠다.
+
+## 2026-08-18 — 통합 테스트 인프라 및 확장 캐릭터 회귀 테스트
+
+- `pnpm test`(DB 불필요 단위 테스트)와 분리된 `pnpm test:integration`을 추가했다. `vitest.integration.config.ts`가 `src/**/*.integration.test.ts`만 대상으로 하고, `TEST_DATABASE_URL`을 `DATABASE_URL`로 주입해 실제 Postgres에 붙는다.
+- `TEST_DATABASE_URL`이 가리키는 별도 데이터베이스를 만들고(`pnpm db:test:create`) 동일한 마이그레이션을 적용하는(`pnpm db:test:migrate`, `drizzle.test.config.ts`) 스크립트를 추가했다. 개발 DB와 같은 마이그레이션을 적용하므로 3.5.1 시드 데이터가 그대로 재현되어, 손으로 만든 픽스처 대신 실제 발행 데이터로 검증한다.
+- `src/lib/game-data/released-characters.integration.test.ts`를 추가해, 3.5.1 캐릭터 확대에서 추가된 11명(기염·모르테피·벨리나·유노·감심·상리요·음림·카멜리아·로코코·파수인·양양·현령) 각각에 대해 (1) 공개 릴리스 조회 시 호환 무기가 존재하는지, (2) 최소 구성 빌드 입력이 스키마 검증과 서버 참조 검증(`getBuildReferences`/`validateBuildReferences`, `/api/build-profiles`가 실제로 쓰는 함수)을 모두 통과하는지 자동으로 확인한다. `next-phase-plan.md` 1절의 "각 추가 캐릭터에 대해 공개 조회와 빌드 입력 검증을 자동 테스트한다" 완료 기준을 충족한다.
+- `pnpm lint`, `pnpm test`(기존 25개, 영향 없음), `pnpm test:integration`(신규 23개), `pnpm build`를 통과했다.
+
+## 2026-08-18 — 릴리스 발행 스모크 테스트 실화 및 마이그레이션 번호 정정
+
+- 릴리스 발행 API의 "스모크 검증"이 트랜잭션 내부에서 같은 테이블을 raw select로 재확인하는 수준이라, 공개 라우트(`/characters`, `/api/build-data`)가 실제로 사용하는 조회 함수(`getCurrentPublishedRelease`)의 결함은 잡지 못하던 문제를 정정했다. 발행 트랜잭션이 커밋된 뒤 해당 함수를 직접 호출하고, 캐릭터·무기·에코 행이 실제로 조회되는지까지 확인한다. 스모크 검증이 실패해도 이미 커밋된 발행 자체는 되돌리지 않고, 응답에 `warning`을 담아 관리자가 즉시 공개 화면을 점검하도록 안내한다.
+- 트랜잭션 내부의 기존 재확인 로직은 그대로 유지하되, 발행 후 공개 API 스모크 검증과 역할이 겹치지 않도록 "트랜잭션 내부 일관성 검증"으로 목적을 명확히 했다.
+- `drizzle/0008_party_buffs.sql`이 `0008_correct_character_roles.sql`과 번호가 중복되어 있었다. 저널(`_journal.json`)의 적용 순서(idx 13~16)에 맞춰 `0013_party_buffs`, `0014_add_build_favorites_and_party_profiles`, `0015_expand_element_parties`, `0016_normalize_chisa_base_stats`로 파일명과 저널 태그를 함께 재정렬했다. 마이그레이션 적용은 파일 내용의 해시로 추적되므로 이미 적용된 환경에는 영향이 없으며, 로컬 DB에 `pnpm db:migrate`로 재적용해 무결성을 확인했다.
+- `pnpm lint`, `pnpm test`(25개), `pnpm build`를 통과했다.
+
 ## 2026-07-22 — 회원 빌드 즐겨찾기와 3인 파티 구성
 
 - 저장 빌드를 즐겨찾기에 등록하고, 본인이 소유한 세 개의 저장 빌드를 3인 파티 슬롯에 배치·저장하는 회원 전용 기능을 추가했다.

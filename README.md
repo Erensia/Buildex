@@ -15,6 +15,23 @@ Wuthering Waves 캐릭터 빌드와 파티 버프를 비교하는 웹 앱입니�
 - `NEXTAUTH_SECRET`은 충분히 긴 고정 난수여야 합니다. 값을 바꾸면 기존 로그인 JWT를 복호화할 수 없으므로 브라우저 쿠키를 지우고 다시 로그인해야 합니다.
 - Drizzle 설정은 `.env.local`을 자동으로 읽습니다. 따라서 `pnpm db:migrate` 등 Drizzle 명령을 실행할 때 별도의 환경변수 지정이 필요하지 않습니다.
 
+## 테스트
+
+- `pnpm test`: DB 없이 도는 순수 단위 테스트(`src/**/*.test.ts`)입니다. 별도 준비 없이 어디서나 실행할 수 있습니다.
+- `pnpm test:integration`: 실제 Postgres에 붙는 통합 테스트(`src/**/*.integration.test.ts`)입니다. 공개 라우트가 쓰는 조회 함수(`getCurrentPublishedRelease`, `getBuildReferences` 등)를 실제 DB 데이터로 검증합니다.
+  - 최초 1회 `.env.local`에 `TEST_DATABASE_URL`을 설정합니다(개발 DB와 분리된 별도 데이터베이스를 가리켜야 합니다. 예: `postgres://buildex:buildex@localhost:5433/buildex_test`).
+  - `pnpm test:integration:setup`으로 해당 데이터베이스를 생성하고 마이그레이션을 적용합니다(개발 DB와 동일한 마이그레이션을 적용하므로 시드 데이터도 동일하게 재현됩니다).
+  - 이후 `pnpm test:integration`으로 실행합니다. 스키마·시드 데이터가 바뀌면 `pnpm test:integration:setup`을 다시 실행하세요.
+
+## CI
+
+`main` 브랜치와 모든 PR에서 [.github/workflows/ci.yml](.github/workflows/ci.yml)이 두 잡을 병렬로 실행합니다.
+
+- **lint-test-build**: `pnpm lint` → `pnpm test`(DB 불필요) → `pnpm build`
+- **integration-test**: GitHub Actions 서비스 컨테이너로 Postgres를 띄우고 `pnpm db:test:migrate` → `pnpm test:integration`
+
+CI의 `NEXTAUTH_SECRET`·`ADMIN_EMAIL` 등은 실제 인증·운영과 무관한 플레이스홀더 값입니다.
+
 ## 관리자 데이터 운영
 
 - `ADMIN_EMAIL` 계정으로 로그인한 뒤 `/admin`에서 게임 데이터를 관리합니다.

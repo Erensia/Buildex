@@ -5,7 +5,9 @@
 - Next.js App Router, TypeScript, React, Tailwind CSS
 - PostgreSQL 16, Drizzle ORM
 - Auth.js Credentials 인증
-- Zod 입력 검증, Vitest 단위 테스트
+- Zod 입력 검증
+- Vitest 단위 테스트(`pnpm test`, DB 불필요)와 통합 테스트(`pnpm test:integration`, `TEST_DATABASE_URL`의 실제 Postgres 사용) 이원화. 통합 테스트는 개발 DB와 동일한 Drizzle 마이그레이션을 별도 데이터베이스에 적용해 시드 데이터를 재현하고, 공개 라우트가 쓰는 조회 함수(`getCurrentPublishedRelease`, `getBuildReferences` 등)를 그대로 호출해 검증한다.
+- Docker 배포 구성(`Dockerfile`, `docker-compose.yml`) — 로컬 개발은 `docker-compose.override.yml`로 Postgres만 host에 노출하고, 전체 스택(app+migrate+postgres) 배포도 같은 compose 파일로 지원한다.
 
 ## 주요 흐름
 
@@ -28,7 +30,7 @@
 1. `ADMIN_EMAIL`과 일치하는 계정이 로그인하면 서버가 해당 사용자를 `admin` 역할로 승격한다.
 2. 관리자는 현재 공개 릴리스를 복제해 새 `draft`를 만들고, JSON 입력으로 초안 데이터만 편집한다. 공개·과거 릴리스는 읽기 전용이다.
 3. 발행 전 `/api/admin/game-data/releases`가 릴리스 출처, 모든 행의 버전·검증일, 캐릭터별 호환 무기, 1·3·4 코스트 주옵션 및 모든 에코·세트의 소속 관계를 검사한다.
-4. Publish는 새 초안을 `published`로, 기존 공개본을 `superseded`로 전환하고 게임의 현재 릴리스 포인터를 같은 트랜잭션에서 갱신한다.
+4. Publish는 새 초안을 `published`로, 기존 공개본을 `superseded`로 전환하고 게임의 현재 릴리스 포인터를 같은 트랜잭션에서 갱신한다. 트랜잭션 내부에서는 같은 커넥션으로 재조회하는 일관성 검증만 수행하고, 커밋 후에는 공개 라우트가 실제로 쓰는 `getCurrentPublishedRelease`를 호출해 캐릭터·무기·에코 데이터가 조회 가능한지 확인하는 공개 API 스모크 테스트를 별도로 수행한다. 스모크 테스트가 실패해도 이미 커밋된 발행은 되돌리지 않고, 응답의 `warning`으로 관리자에게 즉시 알린다.
 5. 플래너와 저장 API는 기본적으로 현재 공개 릴리스를 읽는다. 저장 빌드를 열면 해당 빌드의 공개·보존 릴리스를 다시 읽고, 수정도 같은 릴리스를 기준으로 검증한다. 최신 패치로 옮길 때는 사용자가 현재 공개 데이터로 복제한 뒤 명시적으로 저장한다.
 6. 플래너 데이터 API는 선택된 릴리스의 `sourceSnapshot`과 `sourceManifest`를 함께 전달한다. 화면은 게임 행에 남아 있을 수 있는 대표 URL이 아니라 릴리스 출처 목록을 표시한다.
 7. 저장 빌드의 `formula_version`이 현재 번들과 다르면 결과 패널은 `calculated_result` 스냅샷을 재현한다. 사용자가 현재 계산식으로 재계산을 명시적으로 실행한 경우에만 서버가 현재 번들 결과와 버전을 저장한다.
